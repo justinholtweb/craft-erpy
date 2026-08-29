@@ -1,0 +1,57 @@
+{% extends '_layouts/cp' %}
+
+{% set title = letter.label() %}
+{% set selectedSubnavItem = 'deadletters' %}
+{% set crumbs = [{ label: 'Problems'|t('erpy'), url: url('erpy/problems') }] %}
+
+{% block content %}
+    <div class="pane">
+        <p class="error">{{ letter.error }}</p>
+        <p class="light">
+            {{ '{n} attempts · last tried {when}'|t('erpy', {
+                n: letter.attempts,
+                when: letter.lastAttemptAt ? letter.lastAttemptAt|datetime('short') : '—'
+            }) }}
+            {% if connection %} · <a href="{{ url('erpy/connections/' ~ connection.id) }}">{{ connection.name }}</a>{% endif %}
+        </p>
+
+        {% if not letter.retryable %}
+            <p>{{ 'The ERP rejected the document itself rather than failing to receive it. Retrying it unchanged will produce the same answer — fix the cause in the ERP or in Commerce first.'|t('erpy') }}</p>
+        {% endif %}
+
+        {% if canReplay %}
+            <button type="button" class="btn submit" id="erpy-replay">{{ 'Retry now'|t('erpy') }}</button>
+            <span id="erpy-replay-result" class="light" style="margin-left: 8px;"></span>
+        {% endif %}
+    </div>
+
+    <h2>{{ 'The document'|t('erpy') }}</h2>
+    <p class="light">{{ 'Kept exactly as it was built. A retry rebuilds it from Commerce when the source record still exists, so a fix you make there is what gets sent.'|t('erpy') }}</p>
+    <pre class="code" style="white-space: pre-wrap; word-break: break-word;">{{ document }}</pre>
+{% endblock %}
+
+{% js %}
+    (function() {
+        const button = document.getElementById('erpy-replay');
+        const result = document.getElementById('erpy-replay-result');
+
+        if (!button) { return; }
+
+        button.addEventListener('click', function() {
+            button.classList.add('disabled');
+            result.className = 'light';
+            result.textContent = {{ 'Sending…'|t('erpy')|json_encode|raw }};
+
+            Craft.sendActionRequest('POST', 'erpy/problems/replay', { data: { id: {{ letter.id }} } })
+                .then(function(response) {
+                    result.className = response.data.success ? 'success' : 'error';
+                    result.textContent = response.data.message;
+                })
+                .catch(function() {
+                    result.className = 'error';
+                    result.textContent = {{ 'That didn’t work.'|t('erpy')|json_encode|raw }};
+                })
+                .finally(function() { button.classList.remove('disabled'); });
+        });
+    })();
+{% endjs %}

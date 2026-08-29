@@ -1,0 +1,241 @@
+{% extends '_layouts/cp' %}
+{% import '_includes/forms' as forms %}
+
+{% set title = 'Mapping'|t('erpy') ~ ' · ' ~ entity %}
+{% set selectedSubnavItem = 'connections' %}
+{% set fullPageForm = true %}
+{% set crumbs = [
+    { label: 'Connections'|t('erpy'), url: url('erpy/connections') },
+    { label: connection.name, url: url('erpy/connections/' ~ connection.id) }
+] %}
+
+{% set sourceOptions = [] %}
+{% for name in documentFields %}
+    {% set sourceOptions = sourceOptions|merge([name]) %}
+{% endfor %}
+
+{% set transformOptions = [{ label: 'None'|t('erpy'), value: '' }] %}
+{% for value, label in transforms %}
+    {% set transformOptions = transformOptions|merge([{ label: label, value: value }]) %}
+{% endfor %}
+
+{% block content %}
+    <input type="hidden" name="action" value="erpy/mappings/save">
+    <input type="hidden" name="connectionId" value="{{ connection.id }}">
+    <input type="hidden" name="entity" value="{{ entity }}">
+    <input type="hidden" name="direction" value="{{ direction }}">
+    {{ redirectInput('erpy/connections/' ~ connection.id) }}
+
+    <div class="pane">
+        <p>
+            {{ 'The connector already fills in everything Erpy has a canonical field for. Rules here are for the rest — the ERP fields that are specific to your business, and the Craft fields you want them in.'|t('erpy') }}
+        </p>
+        <p class="light">
+            {{ 'A source can be a canonical field (`sku`), the raw ERP payload (`raw.Item_Category_Code`), a nested value (`attributes.COLOUR`) or a quoted constant (`"EACH"`).'|t('erpy') }}
+        </p>
+    </div>
+
+    {% if entity == 'product' %}
+        <h2>{{ 'Products'|t('erpy') }}</h2>
+
+        {{ forms.selectField({
+            label: 'Product type'|t('erpy'),
+            instructions: 'Where new products are created. Required before the first product sync.'|t('erpy'),
+            name: 'options[productTypeId]',
+            options: productTypes,
+            value: map.option('productTypeId')
+        }) }}
+
+        {{ forms.lightswitchField({
+            label: 'Create products that don’t exist yet'|t('erpy'),
+            name: 'options[createMissing]',
+            on: map.option('createMissing', true)
+        }) }}
+
+        {{ forms.lightswitchField({
+            label: 'Update products that already exist'|t('erpy'),
+            name: 'options[updateExisting]',
+            on: map.option('updateExisting', true)
+        }) }}
+
+        {{ forms.lightswitchField({
+            label: 'Overwrite titles from the ERP'|t('erpy'),
+            instructions: 'Off by default. ERP item descriptions are written by whoever set up the item master and are rarely what should appear on a storefront.'|t('erpy'),
+            name: 'options[updateTitle]',
+            on: map.option('updateTitle', false)
+        }) }}
+
+        {{ forms.lightswitchField({
+            label: 'Update prices'|t('erpy'),
+            name: 'options[updatePrice]',
+            on: map.option('updatePrice', true)
+        }) }}
+
+        {{ forms.lightswitchField({
+            label: 'Update weights and dimensions'|t('erpy'),
+            name: 'options[updateDimensions]',
+            on: map.option('updateDimensions', true)
+        }) }}
+
+        {{ forms.lightswitchField({
+            label: 'Follow the ERP’s blocked and discontinued flags'|t('erpy'),
+            instructions: 'Disables the Commerce product when the ERP says the item cannot be sold.'|t('erpy'),
+            name: 'options[respectErpStatus]',
+            on: map.option('respectErpStatus', true)
+        }) }}
+
+        {{ forms.lightswitchField({
+            label: 'Disable variants the ERP stops sending'|t('erpy'),
+            instructions: 'Disabled rather than deleted — deleting a variant takes its order history’s purchasable with it.'|t('erpy'),
+            name: 'options[disableRemovedVariants]',
+            on: map.option('disableRemovedVariants', true)
+        }) }}
+
+    {% elseif entity == 'price' %}
+        <h2>{{ 'Prices'|t('erpy') }}</h2>
+
+        {{ forms.lightswitchField({
+            label: 'Write base prices onto the variant'|t('erpy'),
+            instructions: 'Base prices — no customer, no group, no list — go straight onto the Commerce variant. Everything else is contract pricing and is resolved at cart time.'|t('erpy'),
+            name: 'options[writeBasePriceToVariant]',
+            on: map.option('writeBasePriceToVariant', true)
+        }) }}
+
+        {{ forms.textField({
+            label: 'Base price list code'|t('erpy'),
+            instructions: 'If your ERP puts the standard price on a named list, name it here so it is treated as the base price rather than as a contract.'|t('erpy'),
+            name: 'options[basePriceListCode]',
+            class: 'code',
+            value: map.option('basePriceListCode')
+        }) }}
+
+    {% elseif entity == 'inventory' %}
+        <h2>{{ 'Inventory'|t('erpy') }}</h2>
+
+        {{ forms.textField({
+            label: 'Hold back'|t('erpy'),
+            instructions: 'Units to subtract from every quantity before it reaches Commerce — a safety buffer against overselling.'|t('erpy'),
+            name: 'options[stockBuffer]',
+            type: 'number',
+            size: 5,
+            value: map.option('stockBuffer', 0)
+        }) }}
+
+        {% if inventoryLocations|length > 1 %}
+            <p class="light">{{ 'Map your ERP’s warehouse codes to Commerce inventory locations below, using a rule with the source `warehouse`.'|t('erpy') }}</p>
+        {% endif %}
+
+    {% elseif entity == 'customer' %}
+        <h2>{{ 'Customers'|t('erpy') }}</h2>
+
+        {{ forms.lightswitchField({
+            label: 'Create Craft users for ERP customers'|t('erpy'),
+            instructions: 'Off by default, and worth leaving off. An ERP customer list is full of accounts that have never seen a website, and turning ten thousand of them into Craft users is not a mistake you can quietly undo.'|t('erpy'),
+            name: 'options[createMissingUsers]',
+            on: map.option('createMissingUsers', false)
+        }) }}
+
+        {{ forms.lightswitchField({
+            label: 'Match by email address'|t('erpy'),
+            instructions: 'Used when nothing in the identity map matches yet.'|t('erpy'),
+            name: 'options[matchByEmail]',
+            on: map.option('matchByEmail', true)
+        }) }}
+
+        {{ forms.selectField({
+            label: 'Put new users in'|t('erpy'),
+            name: 'options[userGroupId]',
+            options: userGroups,
+            value: map.option('userGroupId')
+        }) }}
+
+    {% elseif entity == 'orderStatus' or entity == 'shipment' %}
+        <h2>{{ 'Order status'|t('erpy') }}</h2>
+
+        {{ forms.selectField({
+            label: 'When the ERP says an order has shipped'|t('erpy'),
+            instructions: 'Only applied once everything on the order has shipped. Partial fulfilment leaves the status alone and records a note.'|t('erpy'),
+            name: 'options[shippedOrderStatusId]',
+            options: orderStatuses,
+            value: map.option('shippedOrderStatusId')
+        }) }}
+
+    {% elseif entity == 'order' %}
+        <h2>{{ 'Orders'|t('erpy') }}</h2>
+
+        {{ forms.textField({
+            label: 'Guest customer code'|t('erpy'),
+            instructions: 'The ERP account guest orders are booked against — most ERPs have a cash or one-off customer for exactly this.'|t('erpy'),
+            name: 'options[guestCustomerCode]',
+            class: 'code',
+            value: map.option('guestCustomerCode')
+        }) }}
+
+        {{ forms.textField({
+            label: 'Warehouse'|t('erpy'),
+            instructions: 'The ERP location orders are raised against.'|t('erpy'),
+            name: 'options[warehouse]',
+            class: 'code',
+            value: map.option('warehouse')
+        }) }}
+
+        {{ forms.lightswitchField({
+            label: 'Send shipping as an order line'|t('erpy'),
+            instructions: 'Most ERPs want it that way. The ones that have a shipping field of their own do not.'|t('erpy'),
+            name: 'options[shippingAsLine]',
+            on: map.option('shippingAsLine', false)
+        }) }}
+
+        {{ forms.textField({
+            label: 'Shipping SKU'|t('erpy'),
+            instructions: 'The ERP item used for that line.'|t('erpy'),
+            name: 'options[shippingSku]',
+            class: 'code',
+            value: map.option('shippingSku', 'SHIPPING')
+        }) }}
+    {% endif %}
+
+    <hr>
+    <h2>{{ 'Field rules'|t('erpy') }}</h2>
+
+    {{ forms.editableTableField({
+        label: 'Rules'|t('erpy'),
+        instructions: 'Applied after the connector has filled in the canonical fields, so a rule always wins.'|t('erpy'),
+        id: 'rules',
+        name: 'rules',
+        cols: {
+            source: {
+                type: 'singleline',
+                heading: 'From the ERP'|t('erpy'),
+                code: true,
+                placeholder: 'raw.Item_Category_Code'
+            },
+            target: {
+                type: 'singleline',
+                heading: 'Into this Craft field'|t('erpy'),
+                code: true,
+                placeholder: 'myFieldHandle'
+            },
+            transform: {
+                type: 'select',
+                heading: 'Transform'|t('erpy'),
+                options: transformOptions
+            },
+            default: {
+                type: 'singleline',
+                heading: 'If empty, use'|t('erpy'),
+                placeholder: '—'
+            }
+        },
+        rows: map.rules,
+        addRowLabel: 'Add a rule'|t('erpy'),
+        allowAdd: true,
+        allowDelete: true,
+        allowReorder: true
+    }) }}
+
+    <div class="pane">
+        <h3>{{ 'Canonical fields you can read'|t('erpy') }}</h3>
+        <p class="code light">{{ sourceOptions|join(', ') }}</p>
+    </div>
+{% endblock %}

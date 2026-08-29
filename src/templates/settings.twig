@@ -1,0 +1,163 @@
+{# Field names carry no `settings[…]` prefix: `craft\base\Plugin::settingsResponse()` runs this
+   template's output through `View::namespaceInputs(…, 'settings')`, so a name written as
+   `settings[foo]` here posts as `settings[settings][foo]` and saves nothing at all — the screen
+   looks right, Craft says "Plugin settings saved", and every edit is silently discarded. #}
+{% import '_includes/forms' as forms %}
+
+{% set commerceReady = craft.app.plugins.isPluginEnabled('commerce') %}
+
+{% if not commerceReady %}
+    <div class="pane">
+        <p class="error">{{ 'Craft Commerce is not installed or enabled. Erpy needs it to do anything.'|t('erpy') }}</p>
+    </div>
+{% endif %}
+
+<div class="pane" style="border-left: 3px solid #cdd8e4;">
+    <p>
+        {{ 'Credentials live on each connection, not here. This screen is for the things that should be true of every ERP you talk to.'|t('erpy') }}
+        <a href="{{ url('erpy/connections') }}">{{ 'Go to connections'|t('erpy') }}</a>
+    </p>
+</div>
+
+<h2>{{ 'Orders'|t('erpy') }}</h2>
+
+{{ forms.lightswitchField({
+    label: 'Send orders to the ERP automatically'|t('erpy'),
+    instructions: 'Queues a push when Commerce marks an order complete. The push always goes through the queue, so a slow or offline ERP can never delay or fail a checkout.'|t('erpy'),
+    id: 'pushOrdersOnComplete',
+    name: 'pushOrdersOnComplete',
+    on: settings.pushOrdersOnComplete
+}) }}
+
+{{ forms.textField({
+    label: 'Wait before sending'|t('erpy'),
+    instructions: 'Seconds to hold an order back. Worth setting when payment capture is asynchronous and the ERP should not see an order the gateway has not settled.'|t('erpy'),
+    id: 'pushOrderDelaySeconds',
+    name: 'pushOrderDelaySeconds',
+    type: 'number',
+    size: 6,
+    value: settings.pushOrderDelaySeconds,
+    errors: settings.getErrors('pushOrderDelaySeconds')
+}) }}
+
+{{ forms.textField({
+    label: 'Delivery attempts'|t('erpy'),
+    instructions: 'How many times the queue retries an order before it lands on the Problems screen for good.'|t('erpy'),
+    id: 'pushMaxAttempts',
+    name: 'pushMaxAttempts',
+    type: 'number',
+    size: 4,
+    value: settings.pushMaxAttempts,
+    errors: settings.getErrors('pushMaxAttempts')
+}) }}
+
+<hr>
+
+<h2>{{ 'Storefront'|t('erpy') }}</h2>
+
+{{ forms.lightswitchField({
+    label: 'Apply ERP contract pricing'|t('erpy'),
+    instructions: 'Overrides cart line prices with the customer’s negotiated price, price list or quantity break. The most specific audience wins — a price agreed with this customer beats their group’s, even when it is higher.'|t('erpy'),
+    id: 'applyContractPricing',
+    name: 'applyContractPricing',
+    on: settings.applyContractPricing
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Enforce credit limits'|t('erpy'),
+    instructions: 'Off by default, because switching it on can stop a sale. When on, `craft.erpy.canSpend()` answers false for accounts over their limit or on stop — your templates decide what to do about it.'|t('erpy'),
+    id: 'enforceCreditLimit',
+    name: 'enforceCreditLimit',
+    on: settings.enforceCreditLimit
+}) }}
+
+{{ forms.textField({
+    label: 'Trust credit figures for'|t('erpy'),
+    instructions: 'Minutes. Older figures are re-fetched before they are allowed to block anything.'|t('erpy'),
+    id: 'creditMaxAgeMinutes',
+    name: 'creditMaxAgeMinutes',
+    type: 'number',
+    size: 6,
+    value: settings.creditMaxAgeMinutes
+}) }}
+
+<hr>
+
+<h2>{{ 'Scheduling'|t('erpy') }}</h2>
+
+{{ forms.lightswitchField({
+    label: 'Run scheduled syncs'|t('erpy'),
+    instructions: 'Each connection sets its own interval per entity. For a large catalogue, run `php craft erpy/sync/due` from cron instead — it has no request timeout.'|t('erpy'),
+    id: 'scheduleEnabled',
+    name: 'scheduleEnabled',
+    on: settings.scheduleEnabled
+}) }}
+
+<hr>
+
+<h2>{{ 'Logging'|t('erpy') }}</h2>
+
+{{ forms.lightswitchField({
+    label: 'Log requests'|t('erpy'),
+    instructions: 'Credentials are redacted before anything is written, at the transport rather than here — there is no path that could miss it.'|t('erpy'),
+    id: 'logRequests',
+    name: 'logRequests',
+    on: settings.logRequests,
+    toggle: 'log-detail'
+}) }}
+
+<div id="log-detail" class="{{ settings.logRequests ? '' : 'hidden' }}">
+    {{ forms.lightswitchField({
+        label: 'Include request and response bodies'|t('erpy'),
+        instructions: 'The useful part, and the large part.'|t('erpy'),
+        id: 'logBodies',
+        name: 'logBodies',
+        on: settings.logBodies
+    }) }}
+
+    {{ forms.lightswitchField({
+        label: 'Only log failures'|t('erpy'),
+        instructions: 'Worth switching on once you are live: a nightly catalogue sync is tens of thousands of successful requests nobody will ever read.'|t('erpy'),
+        id: 'logErrorsOnly',
+        name: 'logErrorsOnly',
+        on: settings.logErrorsOnly
+    }) }}
+
+    {{ forms.textField({
+        label: 'Keep log entries for'|t('erpy'),
+        instructions: 'Days. Zero keeps them forever.'|t('erpy'),
+        id: 'logRetentionDays',
+        name: 'logRetentionDays',
+        type: 'number',
+        size: 5,
+        value: settings.logRetentionDays
+    }) }}
+</div>
+
+{{ forms.textField({
+    label: 'Keep sync history for'|t('erpy'),
+    instructions: 'Days.'|t('erpy'),
+    id: 'runRetentionDays',
+    name: 'runRetentionDays',
+    type: 'number',
+    size: 5,
+    value: settings.runRetentionDays
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Record unchanged records'|t('erpy'),
+    instructions: 'Off by default. On a 40,000-SKU delta sync, "unchanged" is 39,900 of the rows, and storing them all costs more than the catalogue.'|t('erpy'),
+    id: 'recordSkippedItems',
+    name: 'recordSkippedItems',
+    on: settings.recordSkippedItems
+}) }}
+
+{{ forms.textField({
+    label: 'Give up on a stuck sync after'|t('erpy'),
+    instructions: 'Minutes. A run still marked “running” after this long had its queue worker killed, and is closed out so it stops blocking the next one.'|t('erpy'),
+    id: 'staleRunMinutes',
+    name: 'staleRunMinutes',
+    type: 'number',
+    size: 5,
+    value: settings.staleRunMinutes
+}) }}

@@ -1,0 +1,72 @@
+{% extends '_layouts/cp' %}
+{% import '_includes/forms' as forms %}
+
+{% set title = 'Activity'|t('erpy') %}
+{% set selectedSubnavItem = 'runs' %}
+
+{% block content %}
+    <div class="flex" style="margin-bottom: 14px;">
+        <form method="get" class="flex">
+            {% set connectionOptions = [{ label: 'Every connection'|t('erpy'), value: '' }] %}
+            {% for connection in connections %}
+                {% set connectionOptions = connectionOptions|merge([{ label: connection.name, value: connection.id }]) %}
+            {% endfor %}
+
+            {{ forms.select({ name: 'connection', options: connectionOptions, value: connectionId }) }}
+            {{ forms.select({
+                name: 'status',
+                options: [
+                    { label: 'Any outcome'|t('erpy'), value: '' },
+                    { label: 'Succeeded'|t('erpy'), value: 'success' },
+                    { label: 'Partly failed'|t('erpy'), value: 'partial' },
+                    { label: 'Failed'|t('erpy'), value: 'failed' },
+                    { label: 'Skipped'|t('erpy'), value: 'skipped' },
+                    { label: 'Running'|t('erpy'), value: 'running' }
+                ],
+                value: status
+            }) }}
+            <button type="submit" class="btn">{{ 'Filter'|t('erpy') }}</button>
+        </form>
+    </div>
+
+    {% if runs|length %}
+        <table class="data fullwidth">
+            <thead>
+                <tr>
+                    <th scope="col">{{ 'When'|t('erpy') }}</th>
+                    <th scope="col">{{ 'What'|t('erpy') }}</th>
+                    <th scope="col">{{ 'Trigger'|t('erpy') }}</th>
+                    <th scope="col">{{ 'Result'|t('erpy') }}</th>
+                    <th scope="col">{{ 'Took'|t('erpy') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for run in runs %}
+                    <tr>
+                        <td><a href="{{ url('erpy/runs/' ~ run.id) }}">{{ run.dateCreated ? run.dateCreated|datetime('short') : '' }}</a></td>
+                        <td>
+                            {{ run.label() }}
+                            {% if run.dryRun %}<span class="light">· {{ 'dry run'|t('erpy') }}</span>{% endif %}
+                        </td>
+                        <td><span class="light">{{ run.trigger }}</span></td>
+                        <td>
+                            <span class="status {{ run.statusColor() }}"></span>
+                            {% if run.total() %}
+                                {{ '{c} created, {u} updated, {s} unchanged, {f} failed'|t('erpy', {
+                                    c: run.created, u: run.updated, s: run.skipped, f: run.failed
+                                }) }}
+                            {% else %}
+                                <span class="light">{{ run.message ?? run.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="light">{{ run.durationLabel() }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="pane">
+            <p>{{ 'Nothing has run yet.'|t('erpy') }}</p>
+        </div>
+    {% endif %}
+{% endblock %}

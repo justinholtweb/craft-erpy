@@ -1,0 +1,93 @@
+{% extends '_layouts/cp' %}
+
+{% set title = run.label() %}
+{% set selectedSubnavItem = 'runs' %}
+{% set crumbs = [{ label: 'Activity'|t('erpy'), url: url('erpy/runs') }] %}
+
+{% block content %}
+    <div class="pane">
+        <p>
+            <span class="status {{ run.statusColor() }}"></span>
+            <strong>{{ run.status }}</strong>
+            {% if connection %} · <a href="{{ url('erpy/connections/' ~ connection.id) }}">{{ connection.name }}</a>{% endif %}
+            · {{ run.trigger }}
+            {% if run.dryRun %} · <em>{{ 'dry run — nothing was changed'|t('erpy') }}</em>{% endif %}
+        </p>
+        <p class="light">
+            {{ '{c} created · {u} updated · {s} unchanged · {f} failed · {r} requests · {d}'|t('erpy', {
+                c: run.created, u: run.updated, s: run.skipped, f: run.failed, r: run.requests, d: run.durationLabel()
+            }) }}
+        </p>
+        {% if run.cursorBefore %}
+            <p class="light">{{ 'Asked the ERP for everything changed since {since}.'|t('erpy', { since: run.cursorBefore }) }}</p>
+        {% else %}
+            <p class="light">{{ 'A full read — no delta watermark was used.'|t('erpy') }}</p>
+        {% endif %}
+        {% if run.message %}<p class="error">{{ run.message }}</p>{% endif %}
+    </div>
+
+    <div class="flex" style="margin-bottom: 14px;">
+        <a href="{{ url('erpy/runs/' ~ run.id) }}" class="btn {{ filter == '' ? 'active' }}">{{ 'Everything'|t('erpy') }}</a>
+        {% for action in actions %}
+            <a href="{{ url('erpy/runs/' ~ run.id, { action: action }) }}" class="btn {{ filter == action ? 'active' }}">{{ action }}</a>
+        {% endfor %}
+    </div>
+
+    {% if items|length %}
+        <table class="data fullwidth">
+            <thead>
+                <tr>
+                    <th scope="col">{{ 'Record'|t('erpy') }}</th>
+                    <th scope="col">{{ 'ERP id'|t('erpy') }}</th>
+                    <th scope="col">{{ 'What happened'|t('erpy') }}</th>
+                    <th scope="col">{{ 'Changes'|t('erpy') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                    <tr>
+                        <td class="code">{{ item.naturalKey ?? '—' }}</td>
+                        <td class="code light">{{ item.remoteId ?? '—' }}</td>
+                        <td>
+                            <strong>{{ item.action }}</strong>
+                            {% if item.message %}<div class="light">{{ item.message }}</div>{% endif %}
+                        </td>
+                        <td class="light">
+                            {% for field, change in item.changeList() %}
+                                <div class="code">{{ field }}: {{ change[0] ?? '—' }} → {{ change[1] ?? '—' }}</div>
+                            {% endfor %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="pane">
+            <p>{{ 'No per-record detail was stored for this run.'|t('erpy') }}</p>
+            <p class="light">{{ 'Unchanged records are not recorded by default — on a large delta sync they are almost all of them. Switch “Record unchanged records” on in the settings if you need them.'|t('erpy') }}</p>
+        </div>
+    {% endif %}
+
+    {% if requests|length %}
+        <hr>
+        <h2>{{ 'Requests'|t('erpy') }}</h2>
+        <table class="data fullwidth">
+            <thead>
+                <tr>
+                    <th scope="col">{{ 'Status'|t('erpy') }}</th>
+                    <th scope="col">{{ 'Request'|t('erpy') }}</th>
+                    <th scope="col">{{ 'Took'|t('erpy') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in requests %}
+                    <tr>
+                        <td class="{{ entry.isError() ? 'error' }}">{{ entry.statusLabel() }}</td>
+                        <td><a href="{{ url('erpy/log/' ~ entry.id) }}" class="code">{{ entry.method }} {{ entry.url|slice(0, 110) }}</a></td>
+                        <td class="light">{{ entry.durationMs ? entry.durationMs ~ 'ms' : '—' }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+{% endblock %}

@@ -1,0 +1,348 @@
+{% extends '_layouts/cp' %}
+{% import '_includes/forms' as forms %}
+
+{% set title = connection.id ? connection.name : 'New connection'|t('erpy') %}
+{% set selectedSubnavItem = 'connections' %}
+{% set fullPageForm = true %}
+{% set crumbs = [{ label: 'Connections'|t('erpy'), url: url('erpy/connections') }] %}
+
+{% set connectorOptions = [{ label: 'Choose an ERP…'|t('erpy'), value: '' }] %}
+{% for vendor, list in connectors %}
+    {% for item in list %}
+        {% set connectorOptions = connectorOptions|merge([{
+            label: vendor ~ ' — ' ~ item.name,
+            value: item.handle
+        }]) %}
+    {% endfor %}
+{% endfor %}
+
+{% block content %}
+    <input type="hidden" name="action" value="erpy/connections/save">
+    <input type="hidden" name="connectionId" value="{{ connection.id }}">
+    {{ redirectInput('erpy/connections') }}
+
+    {{ forms.textField({
+        first: true,
+        label: 'Name'|t('erpy'),
+        instructions: 'What you call this ERP company. Shown throughout the control panel.'|t('erpy'),
+        id: 'name',
+        name: 'name',
+        value: connection.name,
+        required: true,
+        errors: connection.getErrors('name')
+    }) }}
+
+    {{ forms.textField({
+        label: 'Handle'|t('erpy'),
+        instructions: 'Used by the console commands and the webhook URL.'|t('erpy'),
+        id: 'handle',
+        name: 'handle',
+        class: 'code',
+        value: connection.handle,
+        required: true,
+        errors: connection.getErrors('handle')
+    }) }}
+
+    {{ forms.selectField({
+        label: 'ERP'|t('erpy'),
+        instructions: 'Each ERP is a separate free add-on. If yours is not listed, install its plugin.'|t('erpy'),
+        id: 'connector',
+        name: 'connector',
+        options: connectorOptions,
+        value: connection.connector,
+        errors: connection.getErrors('connector')
+    }) }}
+
+    {% if connector is null and connection.connector %}
+        <div class="pane">
+            <p class="error">
+                {{ 'The add-on for “{handle}” is not installed on this site. The connection is safe — install the plugin and everything comes back.'|t('erpy', { handle: connection.connector }) }}
+            </p>
+        </div>
+    {% endif %}
+
+    {% if connector %}
+        <div class="pane">
+            <h2>{{ connector.name }}</h2>
+            <p class="light">{{ connector.description }}</p>
+            {% if connector.setupUrl %}
+                <p><a href="{{ connector.setupUrl }}" rel="noopener noreferrer" target="_blank">{{ 'Where to create these credentials'|t('erpy') }} →</a></p>
+            {% endif %}
+        </div>
+
+        <hr>
+        <h2>{{ 'Credentials'|t('erpy') }}</h2>
+
+        {% for field in settingsFields %}
+            {% set value = connection.settings[field.name] ?? field.default ?? '' %}
+
+            {% if field.type == 'heading' %}
+                <h3>{{ field.label }}</h3>
+                {% if field.instructions %}<p class="light">{{ field.instructions }}</p>{% endif %}
+
+            {% elseif field.type == 'copyable' %}
+                {{ forms.textField({
+                    label: field.label,
+                    instructions: field.instructions,
+                    id: 'copy-' ~ field.name,
+                    value: field.value,
+                    class: 'code',
+                    readonly: true
+                }) }}
+
+            {% elseif field.type == 'boolean' %}
+                {{ forms.lightswitchField({
+                    label: field.label,
+                    instructions: field.instructions,
+                    id: 'settings-' ~ field.name,
+                    name: 'settings[' ~ field.name ~ ']',
+                    on: value
+                }) }}
+
+            {% elseif field.type == 'select' %}
+                {{ forms.selectField({
+                    label: field.label,
+                    instructions: field.instructions,
+                    id: 'settings-' ~ field.name,
+                    name: 'settings[' ~ field.name ~ ']',
+                    options: field.options,
+                    value: value
+                }) }}
+
+            {% elseif field.secret %}
+                {# A saved secret is never sent back to the browser. Leaving the box empty means
+                   "keep what is stored", which is why the service merges rather than overwrites. #}
+                {{ forms.autosuggestField({
+                    label: field.label,
+                    instructions: field.instructions,
+                    id: 'settings-' ~ field.name,
+                    name: 'settings[' ~ field.name ~ ']',
+                    suggestEnvVars: true,
+                    value: (value starts with '$') ? value : '',
+                    placeholder: value ? '••••••••  ' ~ 'saved — leave blank to keep it'|t('erpy') : '',
+                    required: false
+                }) }}
+
+            {% else %}
+                {% if field.suggestEnvVars %}
+                    {{ forms.autosuggestField({
+                        label: field.label,
+                        instructions: field.instructions,
+                        id: 'settings-' ~ field.name,
+                        name: 'settings[' ~ field.name ~ ']',
+                        suggestEnvVars: true,
+                        value: value,
+                        placeholder: field.placeholder ?? ''
+                    }) }}
+                {% else %}
+                    {{ forms.textField({
+                        label: field.label,
+                        instructions: field.instructions,
+                        id: 'settings-' ~ field.name,
+                        name: 'settings[' ~ field.name ~ ']',
+                        type: field.type == 'number' ? 'number' : 'text',
+                        value: value,
+                        placeholder: field.placeholder ?? ''
+                    }) }}
+                {% endif %}
+            {% endif %}
+        {% endfor %}
+
+        {% if connection.getErrors('settings') %}
+            <ul class="errors">
+                {% for error in connection.getErrors('settings') %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+        {% endif %}
+
+        {% if connection.id %}
+            <div class="field">
+                {# Never a nested <form>: this page is already one, so secondary actions post
+                   through Craft.sendActionRequest instead. #}
+                <button type="button" class="btn" id="erpy-test">{{ 'Test connection'|t('erpy') }}</button>
+                <span id="erpy-test-result" class="light" style="margin-left: 8px;"></span>
+            </div>
+        {% else %}
+            <p class="light">{{ 'Save the connection before testing it.'|t('erpy') }}</p>
+        {% endif %}
+
+        <hr>
+        <h2>{{ 'What to sync'|t('erpy') }}</h2>
+        <p class="light">{{ 'Only what {name} actually supports is listed. You can narrow a direction; you cannot add one the ERP cannot do.'|t('erpy', { name: connector.name }) }}</p>
+
+        <table class="data fullwidth">
+            <thead>
+                <tr>
+                    <th scope="col">{{ 'Entity'|t('erpy') }}</th>
+                    <th scope="col">{{ 'On'|t('erpy') }}</th>
+                    <th scope="col">{{ 'Direction'|t('erpy') }}</th>
+                    <th scope="col">{{ 'Every'|t('erpy') }}</th>
+                    <th scope="col">{{ 'Delta'|t('erpy') }}</th>
+                    <th scope="col"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entity in entities %}
+                    {% if capabilities.handles(entity) %}
+                        {% set possible = capabilities.directionFor(entity) %}
+                        {% set config = connection.sync[entity] ?? {} %}
+                        {% set directionOptions = [] %}
+                        {% if possible b-and 1 %}{% set directionOptions = directionOptions|merge([{ label: 'ERP → Commerce'|t('erpy'), value: 1 }]) %}{% endif %}
+                        {% if possible b-and 2 %}{% set directionOptions = directionOptions|merge([{ label: 'Commerce → ERP'|t('erpy'), value: 2 }]) %}{% endif %}
+                        {% if possible == 3 %}{% set directionOptions = directionOptions|merge([{ label: 'Both ways'|t('erpy'), value: 3 }]) %}{% endif %}
+
+                        <tr>
+                            <td><strong>{{ entity }}</strong></td>
+                            <td>
+                                {{ forms.lightswitch({
+                                    id: 'sync-' ~ entity,
+                                    name: 'sync[' ~ entity ~ '][enabled]',
+                                    on: config.enabled ?? false
+                                }) }}
+                            </td>
+                            <td>
+                                {{ forms.select({
+                                    name: 'sync[' ~ entity ~ '][direction]',
+                                    options: directionOptions,
+                                    value: config.direction ?? possible
+                                }) }}
+                            </td>
+                            <td>
+                                {{ forms.select({
+                                    name: 'sync[' ~ entity ~ '][interval]',
+                                    options: [
+                                        { label: 'Manually'|t('erpy'), value: 0 },
+                                        { label: '15 minutes'|t('erpy'), value: 900 },
+                                        { label: 'Hour'|t('erpy'), value: 3600 },
+                                        { label: '6 hours'|t('erpy'), value: 21600 },
+                                        { label: 'Day'|t('erpy'), value: 86400 }
+                                    ],
+                                    value: config.interval ?? 0
+                                }) }}
+                            </td>
+                            <td>
+                                {% if capabilities.supportsDelta(entity) %}
+                                    <span class="status green" title="{{ 'This ERP can return only what changed'|t('erpy') }}"></span>
+                                {% else %}
+                                    <span class="light" title="{{ 'Every sync of this entity is a full one'|t('erpy') }}">{{ 'full'|t('erpy') }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="thin">
+                                {% if connection.id %}
+                                    <a href="{{ url('erpy/connections/' ~ connection.id ~ '/mapping/' ~ entity) }}">{{ 'Mapping'|t('erpy') }}</a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {% if connection.id and lastRuns|length %}
+            <hr>
+            <h2>{{ 'Last run'|t('erpy') }}</h2>
+            <table class="data fullwidth">
+                <tbody>
+                    {% for entity, run in lastRuns %}
+                        <tr>
+                            <td>{{ entity }}</td>
+                            <td>
+                                {% if run %}
+                                    <span class="status {{ run.statusColor() }}"></span>
+                                    <a href="{{ url('erpy/runs/' ~ run.id) }}">{{ run.status }}</a>
+                                    <span class="light">{{ run.created }}+ {{ run.updated }}~ {{ run.failed }}✗ · {{ run.durationLabel() }}</span>
+                                {% else %}
+                                    <span class="light">{{ 'Never run'|t('erpy') }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="field">
+                <button type="button" class="btn" id="erpy-sync">{{ 'Sync now'|t('erpy') }}</button>
+                <button type="button" class="btn" id="erpy-sync-full">{{ 'Full resync'|t('erpy') }}</button>
+                <span id="erpy-sync-result" class="light" style="margin-left: 8px;"></span>
+            </div>
+        {% endif %}
+
+        {% if capabilities.supportsWebhooks() and webhookUrl %}
+            <hr>
+            <h2>{{ 'Webhook'|t('erpy') }}</h2>
+            <p class="light">{{ '{name} can tell Erpy when something changes instead of being polled. Point it here and set a secret above.'|t('erpy', { name: connector.name }) }}</p>
+            {{ forms.textField({ label: 'Endpoint'|t('erpy'), id: 'webhook-url', value: webhookUrl, class: 'code', readonly: true }) }}
+        {% endif %}
+
+        <hr>
+        {{ forms.lightswitchField({
+            label: 'Enabled'|t('erpy'),
+            instructions: 'A disabled connection syncs nothing and sends nothing. Required credentials are only enforced once you switch this on, so you can save a half-finished setup and come back.'|t('erpy'),
+            id: 'enabled',
+            name: 'enabled',
+            on: connection.enabled
+        }) }}
+    {% endif %}
+{% endblock %}
+
+{% if connection.id %}
+    {% js %}
+        (function() {
+            const id = {{ connection.id }};
+
+            const test = document.getElementById('erpy-test');
+            const testResult = document.getElementById('erpy-test-result');
+
+            if (test) {
+                test.addEventListener('click', function() {
+                    test.classList.add('disabled');
+                    testResult.textContent = {{ 'Testing…'|t('erpy')|json_encode|raw }};
+
+                    Craft.sendActionRequest('POST', 'erpy/connections/test', { data: { id: id } })
+                        .then(function(response) {
+                            const data = response.data;
+                            let text = (data.ok ? '✓ ' : '✗ ') + data.message;
+
+                            for (const key in (data.details || {})) {
+                                text += '  ·  ' + key + ': ' + data.details[key];
+                            }
+
+                            (data.hints || []).forEach(function(hint) { text += '  →  ' + hint; });
+                            testResult.textContent = text;
+                            testResult.className = data.ok ? 'success' : 'error';
+                        })
+                        .catch(function(error) {
+                            testResult.className = 'error';
+                            testResult.textContent = (error.response && error.response.data && error.response.data.error) || 'The test could not be run.';
+                        })
+                        .finally(function() { test.classList.remove('disabled'); });
+                });
+            }
+
+            const syncResult = document.getElementById('erpy-sync-result');
+
+            function sync(full) {
+                syncResult.className = 'light';
+                syncResult.textContent = {{ 'Queueing…'|t('erpy')|json_encode|raw }};
+
+                Craft.sendActionRequest('POST', 'erpy/connections/sync', { data: { id: id, full: full } })
+                    .then(function(response) { syncResult.textContent = response.data.message; })
+                    .catch(function() {
+                        syncResult.className = 'error';
+                        syncResult.textContent = {{ 'Couldn’t queue the sync.'|t('erpy')|json_encode|raw }};
+                    });
+            }
+
+            const syncButton = document.getElementById('erpy-sync');
+            const fullButton = document.getElementById('erpy-sync-full');
+
+            if (syncButton) { syncButton.addEventListener('click', function() { sync(false); }); }
+            if (fullButton) {
+                fullButton.addEventListener('click', function() {
+                    if (confirm({{ 'A full resync ignores the delta watermark and reads everything the ERP has. On a large catalogue this can take a while. Continue?'|t('erpy')|json_encode|raw }})) {
+                        sync(true);
+                    }
+                });
+            }
+        })();
+    {% endjs %}
+{% endif %}

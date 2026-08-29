@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+    <!-- Two systems, and the gateway that keeps them in step: a ledger block on the left,
+         a storefront awning on the right, and the exchange arrows between them. -->
+    <rect x="6" y="24" width="26" height="52" rx="3" fill="none" stroke="currentColor" stroke-width="5"/>
+    <path d="M13 38h12M13 48h12M13 58h8" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+    <path d="M68 34h26v42H68z" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M64 34l6-10h22l6 10z" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M38 42h24m0 0l-7-7m7 7l-7 7" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M62 62H38m0 0l7-7m-7 7l7 7" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

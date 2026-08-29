@@ -1,0 +1,103 @@
+{% extends '_layouts/cp' %}
+{% import '_includes/forms' as forms %}
+
+{% set title = 'Problems'|t('erpy') %}
+{% set selectedSubnavItem = 'deadletters' %}
+
+{% block actionButton %}
+    {% if canReplay and letters|length %}
+        <button type="button" class="btn submit" id="erpy-replay-all">{{ 'Retry everything'|t('erpy') }}</button>
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+    {% if letters|length %}
+        <div class="pane">
+            <p>{{ 'These documents did not make it. Nothing has been lost — each one is kept whole, so once you have fixed the cause you can send the original rather than rebuilding it.'|t('erpy') }}</p>
+        </div>
+
+        <table class="data fullwidth">
+            <thead>
+                <tr>
+                    <th scope="col">{{ 'Document'|t('erpy') }}</th>
+                    <th scope="col">{{ 'What the ERP said'|t('erpy') }}</th>
+                    <th scope="col">{{ 'Tries'|t('erpy') }}</th>
+                    <th scope="col">{{ 'Last tried'|t('erpy') }}</th>
+                    <th scope="col"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for letter in letters %}
+                    <tr data-id="{{ letter.id }}">
+                        <td>
+                            <a href="{{ url('erpy/problems/' ~ letter.id) }}"><strong>{{ letter.naturalKey }}</strong></a>
+                            <div class="light">{{ letter.entity }}</div>
+                        </td>
+                        <td>
+                            {{ letter.error|slice(0, 220) }}
+                            {% if not letter.retryable %}
+                                <div class="light">{{ 'Rejected outright — retrying it unchanged will fail the same way.'|t('erpy') }}</div>
+                            {% endif %}
+                        </td>
+                        <td>{{ letter.attempts }}</td>
+                        <td class="light">{{ letter.lastAttemptAt ? letter.lastAttemptAt|datetime('short') : '—' }}</td>
+                        <td class="thin">
+                            {% if canReplay %}
+                                <button type="button" class="btn small erpy-replay" data-id="{{ letter.id }}">{{ 'Retry'|t('erpy') }}</button>
+                                <button type="button" class="btn small erpy-dismiss" data-id="{{ letter.id }}">{{ 'Dismiss'|t('erpy') }}</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="pane">
+            <h2>{{ 'Nothing is stuck'|t('erpy') }}</h2>
+            <p>{{ 'Every document Erpy has built has reached its ERP.'|t('erpy') }}</p>
+        </div>
+    {% endif %}
+{% endblock %}
+
+{% js %}
+    (function() {
+        function post(action, id, row) {
+            Craft.sendActionRequest('POST', action, { data: { id: id } })
+                .then(function(response) {
+                    if (response.data.success && row) { row.remove(); }
+                    if (response.data.message) { Craft.cp.displayNotice(response.data.message); }
+                })
+                .catch(function() { Craft.cp.displayError({{ 'That didn’t work.'|t('erpy')|json_encode|raw }}); });
+        }
+
+        document.querySelectorAll('.erpy-replay').forEach(function(button) {
+            button.addEventListener('click', function() {
+                button.classList.add('disabled');
+                post('erpy/problems/replay', button.dataset.id, button.closest('tr'));
+            });
+        });
+
+        document.querySelectorAll('.erpy-dismiss').forEach(function(button) {
+            button.addEventListener('click', function() {
+                post('erpy/problems/dismiss', button.dataset.id, button.closest('tr'));
+            });
+        });
+
+        const all = document.getElementById('erpy-replay-all');
+
+        if (all) {
+            all.addEventListener('click', function() {
+                all.classList.add('disabled');
+                Craft.sendActionRequest('POST', 'erpy/problems/replay-all', { data: {} })
+                    .then(function(response) {
+                        Craft.cp.displayNotice(response.data.message);
+                        window.location.reload();
+                    })
+                    .catch(function() {
+                        all.classList.remove('disabled');
+                        Craft.cp.displayError({{ 'That didn’t work.'|t('erpy')|json_encode|raw }});
+                    });
+            });
+        }
+    })();
+{% endjs %}

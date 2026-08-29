@@ -1,0 +1,100 @@
+{% extends '_layouts/cp' %}
+{% import '_includes/forms' as forms %}
+
+{% set title = 'Connections'|t('erpy') %}
+{% set selectedSubnavItem = 'connections' %}
+
+{% block actionButton %}
+    {% if canManage %}
+        <a href="{{ url('erpy/connections/new') }}" class="btn submit add icon">{{ 'New connection'|t('erpy') }}</a>
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+    {% if connections|length %}
+        <table class="data fullwidth">
+            <thead>
+                <tr>
+                    <th scope="col">{{ 'Connection'|t('erpy') }}</th>
+                    <th scope="col">{{ 'ERP'|t('erpy') }}</th>
+                    <th scope="col">{{ 'Syncing'|t('erpy') }}</th>
+                    <th scope="col">{{ 'Last activity'|t('erpy') }}</th>
+                    <th scope="col">{{ 'Problems'|t('erpy') }}</th>
+                    <th scope="col"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for connection in connections %}
+                    {% set info = summary[connection.id] %}
+                    <tr>
+                        <td>
+                            <a href="{{ url('erpy/connections/' ~ connection.id) }}"><strong>{{ connection.name }}</strong></a>
+                            <div class="light code">{{ connection.handle }}</div>
+                        </td>
+                        <td>
+                            {% if info.connector %}
+                                {{ info.connector.name }}
+                                <div class="light">{{ info.connector.vendor }}</div>
+                            {% else %}
+                                <span class="error">{{ 'Add-on not installed'|t('erpy') }}</span>
+                                <div class="light code">{{ connection.connector }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if info.entities|length %}
+                                {% for entity in info.entities %}
+                                    <span class="light">{{ entity }}{{ not loop.last ? ',' }}</span>
+                                {% endfor %}
+                            {% else %}
+                                <span class="light">{{ 'Nothing yet'|t('erpy') }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if info.lastRun %}
+                                <a href="{{ url('erpy/runs/' ~ info.lastRun.id) }}">
+                                    <span class="status {{ info.lastRun.statusColor() }}"></span>
+                                    {{ info.lastRun.dateCreated ? info.lastRun.dateCreated|datetime('short') : '' }}
+                                </a>
+                            {% else %}
+                                <span class="light">{{ 'Never run'|t('erpy') }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if info.problems %}
+                                <a href="{{ url('erpy/problems', { connection: connection.id }) }}" class="error">{{ info.problems }}</a>
+                            {% else %}
+                                <span class="light">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="thin">
+                            {% if connection.enabled %}
+                                <span class="status enabled" title="{{ 'Enabled'|t('erpy') }}"></span>
+                            {% else %}
+                                <span class="status" title="{{ 'Disabled'|t('erpy') }}"></span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="pane">
+            <h2>{{ 'No connections yet'|t('erpy') }}</h2>
+            <p>{{ 'A connection is one link to one ERP company. You can have several — a live company and a sandbox, or two subsidiaries feeding two Commerce stores.'|t('erpy') }}</p>
+
+            {% if connectors|length %}
+                <p>{{ 'Connectors installed on this site:'|t('erpy') }}</p>
+                <ul>
+                    {% for vendor, list in connectors %}
+                        <li><strong>{{ vendor }}</strong> — {% for item in list %}{{ item.name }}{{ not loop.last ? ', ' }}{% endfor %}</li>
+                    {% endfor %}
+                </ul>
+                <p class="light">{{ 'Each ERP is a separate free add-on plugin. Install the one you need, and it appears here.'|t('erpy') }}</p>
+            {% endif %}
+
+            {% if canManage %}
+                <a href="{{ url('erpy/connections/new') }}" class="btn submit">{{ 'Add your first connection'|t('erpy') }}</a>
+            {% endif %}
+        </div>
+    {% endif %}
+{% endblock %}
