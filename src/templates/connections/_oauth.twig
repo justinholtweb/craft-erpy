@@ -1,0 +1,56 @@
+{#
+    The consent step for connectors that authenticate with an OAuth authorization-code grant.
+
+    Rendered only when `oauth` is not null, which the controller decides from the connector's own
+    auth strategy. The button is a plain link rather than a form: this page is already a form,
+    and consent has to be a top-level navigation to the vendor anyway. Its label is exactly
+    “Connect” before consent, because that is the word the connectors' own test messages use.
+#}
+{% set canManage = canManage ?? false %}
+
+<div class="field" id="erpy-oauth">
+    <div class="heading">
+        <label>{{ 'Authorisation'|t('erpy') }}</label>
+    </div>
+    <div class="instructions">
+        <p>{{ '{name} needs a person to approve access once, in {name} itself. Erpy keeps the refresh token after that.'|t('erpy', { name: connectorName }) }}</p>
+    </div>
+
+    {% if not connection.id %}
+        <p class="light">{{ 'Save the connection, then connect it.'|t('erpy') }}</p>
+    {% else %}
+        <p id="erpy-oauth-state">
+            {% if oauth.authorized %}
+                <span class="status green"></span>
+                <strong>{{ 'Connected'|t('erpy') }}</strong>
+                {% if oauth.authorizedAt %}
+                    <span class="light">· {{ 'authorised {date}'|t('erpy', { date: oauth.authorizedAt|datetime('short') }) }}</span>
+                {% endif %}
+                {% if oauth.accessExpiresAt %}
+                    <span class="light">· {{ 'access token valid until {date}'|t('erpy', { date: oauth.accessExpiresAt|datetime('short') }) }}</span>
+                {% endif %}
+                {% if oauth.refreshExpiresAt %}
+                    <span class="light">· {{ 'consent expires {date}'|t('erpy', { date: oauth.refreshExpiresAt|datetime('short') }) }}</span>
+                {% endif %}
+            {% else %}
+                <span class="status"></span>
+                <strong>{{ 'Not connected'|t('erpy') }}</strong>
+            {% endif %}
+        </p>
+
+        {% if canManage %}
+            {% if oauth.hasClientCredentials %}
+                <div class="flex">
+                    <a class="btn {{ oauth.authorized ? '' : 'submit' }}" id="erpy-oauth-connect" href="{{ actionUrl('erpy/oauth/connect', { id: connection.id }) }}">
+                        {{- oauth.authorized ? 'Reconnect'|t('erpy') : 'Connect'|t('erpy') -}}
+                    </a>
+                    {% if oauth.authorized %}
+                        <button type="button" class="btn" id="erpy-oauth-disconnect" data-id="{{ connection.id }}">{{ 'Disconnect'|t('erpy') }}</button>
+                    {% endif %}
+                </div>
+            {% else %}
+                <p class="light">{{ 'Save the client ID and secret, then connect.'|t('erpy') }}</p>
+            {% endif %}
+        {% endif %}
+    {% endif %}
+</div>

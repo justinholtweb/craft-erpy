@@ -12,6 +12,7 @@ use justinholtweb\erpy\db\Table;
 use justinholtweb\erpy\models\Connection;
 use justinholtweb\erpy\models\LogEntry;
 use justinholtweb\erpy\Plugin;
+use Throwable;
 
 /**
  * The connection log.
@@ -107,17 +108,27 @@ class Log extends Component
         Craft::error('Erpy: ' . $message, 'erpy');
     }
 
+    /**
+     * Every write path — request, note, error — ends here, so this is where the rule lives: a
+     * log write must never be the reason a sync fails. A foreign key to a connection that was
+     * never saved, a full disk, a column too narrow for some ERP's error message: each costs one
+     * log row and a warning, never the run, the push or the checkout that was being logged.
+     */
     private function insert(array $values): void
     {
-        $now = Db::prepareDateForDb(new DateTime());
+        try {
+            $now = Db::prepareDateForDb(new DateTime());
 
-        Craft::$app->getDb()->createCommand()
-            ->insert(Table::LOG, array_merge([
-                'dateCreated' => $now,
-                'dateUpdated' => $now,
-                'uid' => StringHelper::UUID(),
-            ], $values))
-            ->execute();
+            Craft::$app->getDb()->createCommand()
+                ->insert(Table::LOG, array_merge([
+                    'dateCreated' => $now,
+                    'dateUpdated' => $now,
+                    'uid' => StringHelper::UUID(),
+                ], $values))
+                ->execute();
+        } catch (Throwable $e) {
+            Craft::warning('Erpy could not write a ' . ($values['type'] ?? 'log') . ' entry: ' . $e->getMessage(), 'erpy');
+        }
     }
 
     private function truncate(string $body): string

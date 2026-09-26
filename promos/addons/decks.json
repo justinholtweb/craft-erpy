@@ -1,0 +1,257 @@
+{
+  "acumatica": {
+    "name": "Acumatica", "vendor": "Acumatica", "slug": "acumatica", "colour": "#0092CC", "textColour": "#33CCFF",
+    "tagline": "Acumatica Cloud ERP, wired into Craft&nbsp;Commerce.",
+    "lede": "Products, stock, customers and credit in; orders out &mdash; through the contract-based REST endpoint.",
+    "connectors": [{"handle": "acumatica", "name": "Acumatica", "short": "Acumatica"}],
+    "connect": "A dedicated integration user, the endpoint version from <b>Web Service Endpoints</b>, and optionally the branch and warehouse orders are raised against.",
+    "traps": [
+      {"title": "One session per run, not per request", "body": "It signs in once, shares both session cookies across the run and signs out after &mdash; so a small licence is not spent on logins."},
+      {"title": "Every value is unwrapped", "body": "Contract payloads send <code>{\"value\": &hellip;}</code> for every field. The connector unwraps them before anything reaches Commerce."},
+      {"title": "Stock you can actually sell", "body": "Read from the inventory summary inquiry, per warehouse, with allocations taken off &mdash; not the company-wide shelf figure."}
+    ],
+    "mapping": {
+      "lede": "Endpoints get extended. When your web SKU lives in a custom field, one rule on the mapping screen points the connector at it &mdash; no fork, no waiting for a release.",
+      "rules": [
+        {"src": "name", "dst": "title"},
+        {"src": "description", "dst": "Body"},
+        {"src": "raw.WebSKU.value | trim", "dst": "sku", "canonical": true, "note": "A canonical target overrides what the connector read. Note the <code>.value</code> &mdash; the raw payload is still wrapped."}
+      ]
+    }
+  },
+  "afas": {
+    "name": "AFAS", "vendor": "AFAS", "slug": "afas", "colour": "#1B5FB4", "textColour": "#6FA3F0",
+    "tagline": "AFAS Profit, wired into Craft&nbsp;Commerce.",
+    "lede": "Items, prices, stock, debtors and credit in; sales orders out &mdash; through your own GetConnectors and UpdateConnectors.",
+    "connectors": [{"handle": "afas", "name": "AFAS Profit", "short": "AFAS"}],
+    "connectHeading": "Your connectors, by name",
+    "connect": "AFAS has no fixed schema &mdash; your partner built the GetConnectors. So every connector name, the modified-date field and the item and customer keys are settings.",
+    "traps": [
+      {"title": "The token, wrapped twice", "body": "Paste the part between <code>&lt;data&gt;</code> tags. Erpy wraps it and base64-encodes it into <code>AfasToken</code>, which is the step that usually earns a 401."},
+      {"title": "Three filter lists kept in step", "body": "AFAS takes field ids, values and operators as parallel lists. One out of step filters on the wrong field and quietly returns the wrong rows."},
+      {"title": "Prices from whichever column exists", "body": "<code>Prijs</code>, <code>Price</code> or <code>Verkoopprijs</code>, in that order &mdash; and anything else is one mapping rule away."}
+    ],
+    "mapping": {
+      "lede": "AFAS is the ERP the mapping overlay was built for. Whatever your partner called a column, a canonical rule points the connector at it before anything reaches Commerce.",
+      "rules": [
+        {"src": "name", "dst": "title"},
+        {"src": "raw.Omschrijving_lang", "dst": "Body"},
+        {"src": "raw.PrijsExclBtw | number", "dst": "unitPrice", "canonical": true, "note": "Overrides the price the connector read from your prices GetConnector."}
+      ]
+    }
+  },
+  "businesscentral": {
+    "name": "Business Central", "vendor": "Business Central", "slug": "business-central", "colour": "#0B53CE", "textColour": "#6E9CFF",
+    "tagline": "Dynamics 365 Business Central, wired into Craft&nbsp;Commerce.",
+    "lede": "Items, prices, stock, customers, invoices and credit in; sales orders out &mdash; through API v2.0 and an Entra ID app.",
+    "connectors": [{"handle": "business-central", "name": "Dynamics 365 Business Central", "short": "Business Central"}],
+    "connect": "An Entra ID app registration with client credentials &mdash; no consent screen, because nobody is awake for a nightly stock sync &mdash; plus the environment and company.",
+    "traps": [
+      {"title": "Prices the standard API never had", "body": "Point it at a sales-prices page you publish as an API, and at a posted-shipments page for tracking numbers. Leave either blank and the run log says why."},
+      {"title": "<code>blocked</code> is not a yes/no", "body": "Blank, Ship, Invoice or All. Any of the three stops brings the customer through on hold."},
+      {"title": "Throttling, honoured", "body": "Business Central answers 429 with a <code>Retry-After</code> it means. The transport waits that long instead of hammering the environment."}
+    ],
+    "mapping": {
+      "lede": "A published page is yours, so its field names are whatever your developer chose. Correct the connector on the mapping screen instead of republishing the page.",
+      "rules": [
+        {"src": "displayName", "dst": "title"},
+        {"src": "raw.itemCategoryCode", "dst": "Category"},
+        {"src": "raw.salesPrice | number", "dst": "unitPrice", "canonical": true, "note": "Your sales-prices page calls it <code>salesPrice</code>; the connector expected <code>unitPrice</code>."}
+      ]
+    }
+  },
+  "exactonline": {
+    "name": "Exact Online", "vendor": "Exact Online", "slug": "exact-online", "colour": "#E1141D", "textColour": "#FF6B70",
+    "tagline": "Exact Online, wired into Craft&nbsp;Commerce.",
+    "lede": "Items, prices, stock, accounts, invoices and credit in; sales orders out &mdash; through Exact&rsquo;s REST API, per division.",
+    "connectors": [{"handle": "exact-online", "name": "Exact Online", "short": "Exact Online"}],
+    "connect": "Your own app registration for your region, then the division. A wrong division answers with an empty, entirely successful response &mdash; so the test checks for it.",
+    "traps": [
+      {"title": "Refresh tokens that rotate", "body": "Every refresh spends the old token. Erpy writes the new one back straight away, so the connection survives the second refresh."},
+      {"title": "A daily rate limit", "body": "About one call a second and a hard cap per day. The transport stays under the minute limit and honours <code>Retry-After</code> for the rest."},
+      {"title": "Dates as <code>/Date(ms)/</code>", "body": "OData v2 dates arrive as wrapped epoch milliseconds, which no date parser reads. The connector converts them."}
+    ],
+    "mapping": {
+      "lede": "The connector reads the item&rsquo;s <code>Code</code>. If your shop sells under another item field, one rule points it there &mdash; no fork, no waiting for a release.",
+      "rules": [
+        {"src": "Description", "dst": "title"},
+        {"src": "raw.ExtraDescription", "dst": "Body"},
+        {"src": "raw.Barcode | trim", "dst": "sku", "canonical": true, "note": "A canonical target overrides what the connector read, before it reaches Commerce."}
+      ]
+    }
+  },
+  "myob": {
+    "name": "MYOB", "vendor": "MYOB", "slug": "myob", "colour": "#6100A5", "textColour": "#B77CFF",
+    "tagline": "MYOB Acumatica and MYOB Exo, wired into Craft&nbsp;Commerce.",
+    "lede": "Two connectors in one add-on: MYOB Acumatica (formerly Advanced) through its REST API, and Exo through the Exo API gateway.",
+    "connectors": [
+      {"handle": "myob-acumatica", "name": "MYOB Acumatica (Advanced)", "short": "Acumatica"},
+      {"handle": "myob-exo", "name": "MYOB Exo", "short": "Exo"}
+    ],
+    "formConnector": 1,
+    "connectHeading": "Three credentials, three fields",
+    "connect": "Exo wants a developer key, an Exo user and &mdash; hosted &mdash; a MYOB account login, and gives the same 401 when any one is wrong. So each is its own labelled field.",
+    "traps": [
+      {"title": "The Exo token is not the Basic header", "body": "The Exo user goes in <code>x-myobapi-exotoken</code>, the MYOB account in <code>Authorization</code>. Swap them and correct credentials still fail."},
+      {"title": "Two levels of stop", "body": "<code>stopcredit</code> 1 warns and 2 blocks. Both arrive on hold, because either means nobody should sell on account without looking."},
+      {"title": "One session on Acumatica", "body": "MYOB counts concurrent sessions against your licence, so the connector signs in once per run and signs out afterwards."}
+    ],
+    "mapping": {
+      "lede": "Exo reads a product&rsquo;s price from <code>sellprice1</code>. If your web price is another band, one rule on the mapping screen corrects it.",
+      "rules": [
+        {"src": "description", "dst": "title"},
+        {"src": "raw.extranotes", "dst": "Body"},
+        {"src": "raw.sellprice2 | number", "dst": "price", "canonical": true, "note": "On MYOB Acumatica the same rule unwraps the value: <code>raw.DefaultPrice.value</code>."}
+      ]
+    }
+  },
+  "netsuite": {
+    "name": "NetSuite", "vendor": "NetSuite", "slug": "netsuite", "colour": "#125580", "textColour": "#7FB8E6",
+    "tagline": "Oracle NetSuite, wired into Craft&nbsp;Commerce.",
+    "lede": "Items, prices, stock, customers, invoices and credit in; sales orders out &mdash; SuiteTalk REST with every bulk read in SuiteQL.",
+    "connectors": [{"handle": "netsuite", "name": "NetSuite", "short": "NetSuite"}],
+    "connect": "Token-Based Authentication: an integration record and an access token, plus the subsidiary and location orders are raised against.",
+    "traps": [
+      {"title": "Bulk reads in SuiteQL", "body": "The record API returns links, one fetch per item. SuiteQL returns whole rows a thousand at a time &mdash; the difference between minutes and all night."},
+      {"title": "<code>externalId</code> as the key", "body": "NetSuite refuses a second order with the same external id, so even two racing workers cannot book one sale twice."},
+      {"title": "One account id, three spellings", "body": "Enter it as NetSuite shows it. The host, the OAuth realm and the signature each get the form they want from that one setting."}
+    ],
+    "mapping": {
+      "lede": "The connector reads the SKU from <code>itemid</code>. If you sell under the UPC, one rule points it there &mdash; no fork, no waiting for a release.",
+      "rules": [
+        {"src": "displayname", "dst": "title"},
+        {"src": "raw.storedescription", "dst": "Body"},
+        {"src": "raw.upccode | trim", "dst": "sku", "canonical": true, "note": "A canonical target overrides what the connector read, before it reaches Commerce."}
+      ]
+    }
+  },
+  "odoo": {
+    "name": "Odoo", "vendor": "Odoo", "slug": "odoo", "colour": "#714B67", "textColour": "#D69BC7",
+    "tagline": "Odoo, wired into Craft&nbsp;Commerce.",
+    "lede": "Products, pricelists, stock, partners, invoices and credit in; quotations out &mdash; Community or Enterprise, over JSON-RPC.",
+    "connectors": [{"handle": "odoo", "name": "Odoo", "short": "Odoo"}],
+    "connect": "Your Odoo URL, the database, and a login with an <b>API key</b> rather than a password &mdash; plus the warehouse and sales team orders belong to.",
+    "traps": [
+      {"title": "Errors that arrive as HTTP 200", "body": "A missing model, a permission failure and a traceback all come back as success. The connector reads the body, so the log shows the real error."},
+      {"title": "Relations as <code>[id, \"Name\"]</code>", "body": "Many-to-one fields are two-element arrays. The connector unpacks them; on the mapping screen, <code>raw.categ_id.1</code> is the name."},
+      {"title": "UTC with no marker", "body": "<code>write_date</code> is UTC and doesn&rsquo;t say so. The watermark is converted first, so a site west of Greenwich doesn&rsquo;t skip hours of changes."}
+    ],
+    "mapping": {
+      "lede": "If your catalogue keys on the barcode rather than the Internal Reference, one rule on the mapping screen corrects the SKU.",
+      "rules": [
+        {"src": "name", "dst": "title"},
+        {"src": "raw.description_sale", "dst": "Body"},
+        {"src": "raw.barcode | nullif: | trim", "dst": "sku", "canonical": true, "note": "Odoo sends an empty field as <code>false</code>; <code>nullif:</code> skips it, so a product with no barcode keeps its reference."}
+      ]
+    }
+  },
+  "priority": {
+    "name": "Priority", "vendor": "Priority", "slug": "priority", "colour": "#16213D", "textColour": "#8C88FF",
+    "tagline": "Priority ERP, wired into Craft&nbsp;Commerce.",
+    "lede": "Parts, stock, customers, invoices and credit in; orders out &mdash; through OData, addressing the same forms your consultant uses.",
+    "connectors": [{"handle": "priority", "name": "Priority", "short": "Priority"}],
+    "connectHeading": "Forms, not resources",
+    "connect": "Priority exposes its forms &mdash; <code>LOGPART</code>, <code>CUSTOMERS</code>, <code>ORDERS</code> &mdash; and every installation customises them. So every form name is a setting.",
+    "traps": [
+      {"title": "<code>OBLIGO</code> is the credit limit", "body": "The word means &ldquo;liability&rdquo; and catches everybody reading the schema for the first time. Credit reads it, with the balance and the block flag."},
+      {"title": "Archived parts stay archived", "body": "Priority archives rather than deletes. A part with <code>PARTARC</code> set arrives blocked and never reaches the storefront."},
+      {"title": "Header and lines in one request", "body": "The order and its lines sub-form go together, so a refused line never leaves an orphaned header behind."}
+    ],
+    "mapping": {
+      "lede": "Because every Priority is customised, this is the screen you will come back to. A canonical rule points the connector at your column &mdash; no fork, no release.",
+      "rules": [
+        {"src": "PARTDES", "dst": "title"},
+        {"src": "raw.EPARTDES", "dst": "Body"},
+        {"src": "raw.WEBPARTNAME | trim", "dst": "sku", "canonical": true, "note": "Your implementation keeps the web part number in a custom column."}
+      ]
+    }
+  },
+  "sage": {
+    "name": "Sage", "vendor": "Sage", "slug": "sage", "colour": "#101312", "textColour": "#00D639",
+    "tagline": "Sage Intacct, 200, X3 and Accounting, wired into Craft&nbsp;Commerce.",
+    "lede": "Sage sells four unrelated products under one name. One add-on, four connectors &mdash; pick the one you run.",
+    "connectors": [
+      {"handle": "sage-intacct", "name": "Sage Intacct", "short": "Intacct"},
+      {"handle": "sage-200", "name": "Sage 200", "short": "200"},
+      {"handle": "sage-x3", "name": "Sage X3", "short": "X3"},
+      {"handle": "sage-accounting", "name": "Sage Business Cloud Accounting", "short": "Accounting"}
+    ],
+    "syncsHeading": "Four products, four honest lists",
+    "connectHeading": "Two logins at once",
+    "connect": "Intacct wants a sender id issued to the integration <i>and</i> a Web Services user in the company &mdash; and the sender authorised under Web Services Authorizations.",
+    "traps": [
+      {"title": "Intacct pages by <code>resultId</code>", "body": "Not by offset. The connector follows the result id Intacct hands back, so large reads neither repeat nor skip."},
+      {"title": "Sage 200 needs <code>X-Site</code>", "body": "A bearer token, the subscription key and the site header on every request. Without the site, an authenticated request quietly returns nothing."},
+      {"title": "Accounting is not an ERP", "body": "No sales orders, no warehouses. So it doesn&rsquo;t pretend: a completed order is posted as a sales invoice, which is what merchants ask for."}
+    ],
+    "mapping": {
+      "lede": "Whichever Sage you run, a canonical rule points the connector at the field you actually sell under &mdash; no fork, no waiting for a release.",
+      "rules": [
+        {"src": "name", "dst": "title"},
+        {"src": "description", "dst": "Body"},
+        {"src": "raw.barcode | trim", "dst": "sku", "canonical": true, "note": "On X3 the same rule reads <code>raw.EANCOD</code>."}
+      ]
+    }
+  },
+  "sapb1": {
+    "name": "SAP Business One", "vendor": "SAP Business One", "slug": "sap-business-one", "colour": "#0070F2", "textColour": "#5CA8FF",
+    "tagline": "SAP Business One, wired into Craft&nbsp;Commerce.",
+    "lede": "Items, price lists, stock, business partners, invoices and credit in; sales orders out &mdash; through the Service Layer.",
+    "connectors": [{"handle": "sap-business-one", "name": "SAP Business One", "short": "SAP B1"}],
+    "connect": "The Service Layer URL, the company database and a B1 user of its own &mdash; every login takes a licence slot, so Erpy shares one session per run.",
+    "traps": [
+      {"title": "<code>tNO</code> is not true", "body": "B1 answers booleans as strings, and <code>(bool) 'tNO'</code> is true in PHP. That is how integrations publish every frozen item. Not this one."},
+      {"title": "Both cookies, every time", "body": "On a load-balanced Service Layer the session lives on one node, and <code>ROUTEID</code> is what gets back to it. The connector sends both."},
+      {"title": "20 rows, unless asked", "body": "The Service Layer ignores <code>$top</code> without an explicit page-size preference. The connector sets it."}
+    ],
+    "mapping": {
+      "lede": "The connector reads the SKU from <code>ItemCode</code>. If you sell under the barcode, or a user-defined field, one rule points it there.",
+      "rules": [
+        {"src": "ItemName", "dst": "title"},
+        {"src": "raw.User_Text", "dst": "Body"},
+        {"src": "raw.U_WebSKU | trim", "dst": "sku", "canonical": true, "note": "B1 prefixes user-defined fields <code>U_</code>, and they are all in the raw payload."}
+      ]
+    }
+  },
+  "unit4": {
+    "name": "Unit4", "vendor": "Unit4", "slug": "unit4", "colour": "#FFFFFF", "textColour": "#F0F0F5",
+    "tagline": "Unit4 ERPx and Business World, wired into Craft&nbsp;Commerce.",
+    "lede": "Products, stock, customers and credit in; sales orders out &mdash; with every resource path a setting, because no two estates match.",
+    "connectors": [{"handle": "unit4", "name": "Unit4 ERP", "short": "Unit4"}],
+    "connectHeading": "Your estate, not a guess",
+    "connect": "Which resources exist depends on your modules and your partner. Every path is a setting, the defaults are ERPx&rsquo;s, and both authentication schemes are offered.",
+    "traps": [
+      {"title": "Collections wrapped four ways", "body": "<code>data</code>, <code>items</code>, <code>value</code>, <code>results</code> &mdash; or bare. It depends on the resource and the release. The connector tries each."},
+      {"title": "Field names that vary", "body": "The SKU from <code>productId</code>, <code>id</code> or <code>code</code>; stock from <code>quantity</code> or <code>balance</code>. It reads the first that exists."},
+      {"title": "Mandatory fields your estate added", "body": "Anything you put in an order&rsquo;s <code>customFields</code> is sent with it &mdash; the way to fill a project or cost-centre code."}
+    ],
+    "mapping": {
+      "lede": "On Unit4 this isn&rsquo;t an edge case, it&rsquo;s part of setting up. A canonical rule points the connector at your estate&rsquo;s field names.",
+      "rules": [
+        {"src": "description", "dst": "title"},
+        {"src": "raw.longText", "dst": "Body"},
+        {"src": "raw.articleCode | trim", "dst": "sku", "canonical": true, "note": "Your products resource calls the item code <code>articleCode</code>."}
+      ]
+    }
+  },
+  "visma": {
+    "name": "Visma", "vendor": "Visma", "slug": "visma", "colour": "#7F56FA", "textColour": "#A98BFF",
+    "tagline": "Visma.net ERP, wired into Craft&nbsp;Commerce.",
+    "lede": "Inventory, stock, customers, invoices and credit in; sales orders out &mdash; through the integration API and Visma Connect.",
+    "connectors": [{"handle": "visma-net", "name": "Visma.net ERP", "short": "Visma.net"}],
+    "connect": "A Visma Connect client, the scope, and the company id &mdash; a wrong company answers with a successful empty list, so the connection test checks for it.",
+    "traps": [
+      {"title": "Delta needs two parameters", "body": "Send <code>lastModifiedDateTime</code> without its condition and Visma returns everything &mdash; a delta sync that works until somebody times it."},
+      {"title": "One company, every request", "body": "Everything is scoped by the <code>ipp-company-id</code> header. The connector sends it on every call, and the test catches it missing."},
+      {"title": "Look-ups that change shape", "body": "Some values arrive as <code>{value, description}</code>, the same field elsewhere as a bare string. The connector accepts both."}
+    ],
+    "mapping": {
+      "lede": "The connector reads the SKU from <code>inventoryNumber</code>. If your web SKU lives elsewhere, one rule on the mapping screen points it there.",
+      "rules": [
+        {"src": "description", "dst": "title"},
+        {"src": "raw.body", "dst": "Body"},
+        {"src": "raw.alternateId | trim", "dst": "sku", "canonical": true, "note": "Where a field is a look-up, add <code>.value</code> and check the preview."}
+      ]
+    }
+  }
+}

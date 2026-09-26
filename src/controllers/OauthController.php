@@ -30,9 +30,15 @@ class OauthController extends Controller
 
     /**
      * Send the merchant to the ERP's consent screen.
+     *
+     * Reached by a plain link from the connection screen (a GET, because it has to become a
+     * top-level navigation to the vendor). It changes nothing by itself: the only thing written
+     * is a single-use state token, and nothing is stored until the callback presents it.
      */
     public function actionConnect(): Response
     {
+        $this->requireCpRequest();
+        $this->requirePermission('erpy-viewConnections');
         $this->requirePermission('erpy-manageConnections');
 
         $connection = Plugin::getInstance()->getConnections()->getById((int)$this->request->getRequiredParam('id'));
@@ -45,6 +51,14 @@ class OauthController extends Controller
 
         if (!$auth instanceof OAuth2AuthorizationCode) {
             throw new BadRequestHttpException('This connector does not use OAuth.');
+        }
+
+        // Without a saved client id the vendor answers with an error page of its own, and the
+        // merchant never finds their way back here.
+        if (!$auth->hasClientCredentials()) {
+            $this->setFailFlash(Craft::t('erpy', 'Save the client ID and secret before connecting.'));
+
+            return $this->redirect(UrlHelper::cpUrl('erpy/connections/' . $connection->id));
         }
 
         $state = StringHelper::UUID();
@@ -87,7 +101,11 @@ class OauthController extends Controller
         $target = UrlHelper::cpUrl('erpy/connections/' . $connection->id);
 
         if ($error !== '') {
-            Craft::$app->getSession()->setError(Craft::t('erpy', 'The ERP refused authorisation: {error}', ['error' => $error]));
+            $description = (string)$this->request->getParam('error_description', '');
+
+            Craft::$app->getSession()->setError(Craft::t('erpy', 'The ERP refused authorisation: {error}', [
+                'error' => $description !== '' ? "$error — $description" : $error,
+            ]));
 
             return $this->redirect($target);
         }
@@ -98,7 +116,9 @@ class OauthController extends Controller
             throw new BadRequestHttpException('No authorisation code came back.');
         }
 
-        if ($auth->exchangeCode($code)) {
+        // A grant that hands back an access token but no refresh token would work for an hour
+        // and then need the merchant again, so it only counts as connected with one stored.
+        if ($auth->exchangeCode($code) && $auth->isAuthorized()) {
             Craft::$app->getSession()->setNotice(Craft::t('erpy', 'Connected. {name} can now talk to your ERP.', ['name' => $connection->name]));
         } else {
             Craft::$app->getSession()->setError(Craft::t('erpy', 'The token exchange failed — the connection log has what the ERP said.'));

@@ -1,22 +1,25 @@
 {% extends '_layouts/cp' %}
-{% import '_includes/forms' as forms %}
 
 {% set title = connection.id ? connection.name : 'New connection'|t('erpy') %}
 {% set selectedSubnavItem = 'connections' %}
 {% set fullPageForm = true %}
 {% set crumbs = [{ label: 'Connections'|t('erpy'), url: url('erpy/connections') }] %}
 
-{% set connectorOptions = [{ label: 'Choose an ERP…'|t('erpy'), value: '' }] %}
-{% for vendor, list in connectors %}
-    {% for item in list %}
-        {% set connectorOptions = connectorOptions|merge([{
-            label: vendor ~ ' — ' ~ item.name,
-            value: item.handle
-        }]) %}
-    {% endfor %}
-{% endfor %}
-
 {% block content %}
+    {# Imported and built inside the block, so the block renders on its own — which is how the
+       engine checks render this screen without a web request to hang the CP layout on. #}
+    {% import '_includes/forms' as forms %}
+
+    {% set connectorOptions = [{ label: 'Choose an ERP…'|t('erpy'), value: '' }] %}
+    {% for vendor, list in connectors %}
+        {% for item in list %}
+            {% set connectorOptions = connectorOptions|merge([{
+                label: vendor ~ ' — ' ~ item.name,
+                value: item.handle
+            }]) %}
+        {% endfor %}
+    {% endfor %}
+
     <input type="hidden" name="action" value="erpy/connections/save">
     <input type="hidden" name="connectionId" value="{{ connection.id }}">
     {{ redirectInput('erpy/connections') }}
@@ -152,6 +155,15 @@
             <ul class="errors">
                 {% for error in connection.getErrors('settings') %}<li>{{ error }}</li>{% endfor %}
             </ul>
+        {% endif %}
+
+        {% if oauth %}
+            {% include 'erpy/connections/_oauth' with {
+                connection: connection,
+                oauth: oauth,
+                connectorName: connector.name,
+                canManage: canManage
+            } only %}
         {% endif %}
 
         {% if connection.id %}
@@ -315,6 +327,25 @@
                             testResult.textContent = (error.response && error.response.data && error.response.data.error) || 'The test could not be run.';
                         })
                         .finally(function() { test.classList.remove('disabled'); });
+                });
+            }
+
+            const disconnect = document.getElementById('erpy-oauth-disconnect');
+
+            if (disconnect) {
+                disconnect.addEventListener('click', function() {
+                    if (!confirm({{ 'Forget the stored tokens? Nothing will sync until somebody connects again.'|t('erpy')|json_encode|raw }})) {
+                        return;
+                    }
+
+                    disconnect.classList.add('disabled');
+
+                    Craft.sendActionRequest('POST', 'erpy/oauth/disconnect', { data: { id: id } })
+                        .then(function() { window.location.reload(); })
+                        .catch(function() {
+                            disconnect.classList.remove('disabled');
+                            Craft.cp.displayError({{ 'Couldn’t disconnect.'|t('erpy')|json_encode|raw }});
+                        });
                 });
             }
 

@@ -11,8 +11,8 @@
  * tenant can do that, and Erpy's mapping screen is what lets a merchant fix it when it is not.
  *
  * What it does prove is the class of bug that actually ships: a connector advertising a flow it
- * never implemented, a delta sync that quietly sends no filter, paging that repeats a cursor
- * forever, credentials that never reach the request, or a push that fatals instead of returning a
+ * never implemented, a delta sync that quietly sends no filter on any entity it claims delta for,
+ * paging that repeats a cursor forever, credentials that never reach the request, or a push that fatals instead of returning a
  * failure the queue can act on.
  */
 
@@ -215,6 +215,169 @@ function makeConnection(string $handle, string $class): Connection
     ]);
 }
 
+/**
+ * Fetch one page of an entity with a `since`, and report whether that moment reached the ERP.
+ *
+ * The moment is deliberately distinctive — a date years before anything else in these requests —
+ * so finding it cannot be a coincidence. Every vendor spells it differently (ISO, `Ymd`, US and
+ * European slashes, OData literals, epoch seconds), some shift it into the tenant's timezone, and
+ * it may travel in the URL, the query, a JSON body, a form or raw XML, so all of those are
+ * searched, URL-decoded, for any spelling of the day before, the day of or the day after.
+ *
+ * @return array{requested:bool,sentDate:bool,serialised:string,error:?string}
+ */
+function deltaProbe(string $class, Connection $connection, string $entity): array
+{
+    $since = new DateTimeImmutable('2019-03-27 14:47:53', new DateTimeZone('UTC'));
+    $recorder = new Recorder(xml: str_contains($class::handle(), 'intacct'));
+
+    /** @var Connector $connector */
+    $connector = new $class();
+    $connector->setConnection($connection);
+    $connector->useDouble($recorder);
+
+    try {
+        $connector->fetchPage($entity, new FetchCriteria(['since' => $since, 'limit' => 5]));
+    } catch (Throwable $e) {
+        return ['requested' => $recorder->business() !== [], 'sentDate' => false, 'serialised' => '', 'error' => $e->getMessage()];
+    }
+
+    $business = $recorder->business();
+    $flags = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
+    $serialised = '';
+
+    foreach ($business as $request) {
+        $options = $request['options'];
+        $query = $options['query'] ?? [];
+
+        $serialised .= ' ' . $request['url']
+            . ' ' . (is_array($query) ? json_encode($query, $flags) . ' ' . http_build_query($query) : (string)$query)
+            . ' ' . (array_key_exists('json', $options) ? json_encode($options['json'], $flags) : '')
+            . ' ' . (is_array($options['form'] ?? null) ? http_build_query($options['form']) : '')
+            . ' ' . (is_string($options['body'] ?? null) ? $options['body'] : '');
+    }
+
+    $haystack = urldecode($serialised);
+    $needles = [(string)$since->getTimestamp(), (string)($since->getTimestamp() * 1000)];
+
+    foreach (['-1 day', '+0 days', '+1 day'] as $shift) {
+        $day = $since->modify($shift);
+
+        foreach (['Y-m-d', 'Ymd', 'm/d/Y', 'd/m/Y', 'Y/m/d', 'd-m-Y', 'd.m.Y'] as $format) {
+            $needles[] = $day->format($format);
+        }
+    }
+
+    $sentDate = false;
+
+    foreach ($needles as $needle) {
+        if (str_contains($haystack, $needle)) {
+            $sentDate = true;
+            break;
+        }
+    }
+
+    return ['requested' => $business !== [], 'sentDate' => $sentDate, 'serialised' => trim($serialised), 'error' => null];
+}
+
+/**
+ * One order that is not the sample order, in every field name these ERPs use for an order
+ * number, an external reference or a customer reference — and an id, so a customer or item lookup
+ * answered with it still finds "something" and the push goes on to its duplicate check.
+ * `wrapped` spells each value the Acumatica way, as `{"value": …}`.
+ */
+function unrelatedOrderRow(string $style): array
+{
+    $other = 'ERPY-UNRELATED-777';
+    $row = ['id' => 777, 'ID' => '00000000-0000-0000-0000-000000000777', 'OrderID' => '00000000-0000-0000-0000-000000000777'];
+
+    foreach ([
+        'number', 'orderNumber', 'OrderNumber', 'OrderNbr', 'DocNum', 'DocEntry', 'NumAtCard', 'YourRef',
+        'externalDocumentNumber', 'customerOrderNumber', 'CustomerOrder', 'CustomerOrderNbr', 'customerRefNo',
+        'reference', 'Reference', 'ExternalRef', 'client_order_ref', 'name', 'ORDNAME', 'BOOKNUM', 'SOHNUM',
+        'CUSORDREF', 'document_no', 'invoice_number', 'tranId', 'externalId', 'CUSTOMERDOCNO', 'DOCNO',
+        'RECORDNO', 'orderNo', 'orderId', 'customerReference', 'yourReference', 'OrderReference',
+        'Description', 'description', 'Code', 'code', 'accno', 'OrderNo', 'OurRef',
+    ] as $key) {
+        $row[$key] = $other;
+    }
+
+    return $style === 'wrapped'
+        ? array_map(static fn($value) => ['value' => $value], $row)
+        : $row;
+}
+
+/** @return array<string,array> shape name => decoded body */
+function unrelatedOrderEnvelopes(string $style): array
+{
+    $row = unrelatedOrderRow($style);
+
+    return [
+        'bare' => [$row],
+        'value' => ['value' => [$row]],
+        '$resources' => ['$resources' => [$row]],
+        '$items' => ['$items' => [$row]],
+        'data' => ['data' => [$row]],
+        'items' => ['items' => [$row]],
+        'results' => ['results' => [$row]],
+        'd.results' => ['d' => ['results' => [$row]]],
+    ];
+}
+
+/**
+ * The recorder's handshakes, with every lookup answered by one unrelated order: a GET for the
+ * REST connectors, a `search_read` for Odoo, a `readByQuery` for Intacct.
+ */
+function unrelatedOrderDouble(string $class, array $body, string $style): callable
+{
+    $recorder = new Recorder(xml: str_contains($class::handle(), 'intacct'));
+    $plain = unrelatedOrderRow('plain');
+
+    return static function(string $method, string $url, array $options) use ($recorder, $body, $plain, $class): Response {
+        if (str_contains($url, 'token') || str_contains($url, 'oauth') || stripos($url, '/login') !== false
+            || ($options['form']['grant_type'] ?? null) !== null
+            || str_ends_with(strtok($url, '?') ?: $url, '/companies')) {
+            return $recorder($method, $url, $options);
+        }
+
+        if (str_contains($url, 'jsonrpc')) {
+            $params = $options['json']['params'] ?? [];
+
+            if (($params['service'] ?? '') === 'common') {
+                return $recorder($method, $url, $options);
+            }
+
+            $call = $params['args'][4] ?? '';
+
+            return Response::json(200, ['result' => match ($call) {
+                'search_read', 'read' => [$plain],
+                'search' => [777],
+                'create' => 778,
+                default => [],
+            }]);
+        }
+
+        if (str_contains($class::handle(), 'intacct')) {
+            $fields = '';
+
+            foreach ($plain as $key => $value) {
+                if (preg_match('/^[A-Za-z_]+$/', (string)$key)) {
+                    $fields .= "<$key>" . htmlspecialchars((string)$value) . "</$key>";
+                }
+            }
+
+            return Response::xml(200, '<?xml version="1.0" encoding="UTF-8"?>'
+                . '<response><control><status>success</status></control>'
+                . '<operation><authentication><status>success</status></authentication>'
+                . '<result><status>success</status>'
+                . '<data listtype="sodocument" count="1" totalcount="1" numremaining="0" resultId="">'
+                . "<sodocument>$fields</sodocument></data></result></operation></response>");
+        }
+
+        return $method === 'GET' ? Response::json(200, $body) : $recorder($method, $url, $options);
+    };
+}
+
 function sampleOrder(): ErpOrder
 {
     $order = new ErpOrder([
@@ -223,7 +386,10 @@ function sampleOrder(): ErpOrder
         'orderedAt' => new DateTime('2026-08-28 10:00:00'),
         'email' => 'buyer@example.test',
         'currency' => 'USD',
-        'customerCode' => 'CUST001',
+        // Numeric, because a numeric code is a valid customer code in every one of these ERPs
+        // and the *only* valid one in some: MYOB Exo's debtor `accno` is an integer, and a code
+        // like `CUST001` is refused before any request, so its POST path was never driven.
+        'customerCode' => '1001',
         'itemTotal' => 50.0,
         'taxTotal' => 5.0,
         'total' => 55.0,
@@ -462,61 +628,61 @@ try {
                 ?: 'no credential reached the request: ' . implode(', ', array_keys($headers));
         });
 
-        check('asks the ERP only for what changed, when it says it can', function() use ($class, $connection, $recorder, $makesRequests) {
+        // Every entity is checked, not just the first one that declares delta: a connector that
+        // filters products properly and forgets the filter on inventory passed this for months,
+        // because products were the only entity it was ever asked about.
+        check('asks the ERP only for what changed, for every entity it says it can', function() use ($class, $connection, $makesRequests) {
             if (!$makesRequests) {
                 return true;
             }
 
             $capabilities = $class::capabilities();
-            $deltaEntity = null;
+            $problems = [];
 
             foreach ($capabilities->entities() as $entity) {
-                if ($capabilities->supportsDelta($entity) && $capabilities->handles($entity, Direction::PULL)) {
-                    $deltaEntity = $entity;
-                    break;
+                if (!$capabilities->supportsDelta($entity) || !$capabilities->handles($entity, Direction::PULL)) {
+                    continue;
+                }
+
+                $probe = deltaProbe($class, $connection, $entity);
+
+                if ($probe['error'] !== null) {
+                    $problems[] = "$entity: a delta fetch threw — {$probe['error']}";
+                } elseif (!$probe['requested']) {
+                    $problems[] = "$entity: no request was made";
+                } elseif (!$probe['sentDate']) {
+                    $problems[] = "$entity: declared delta but the request carried no date — " . mb_substr($probe['serialised'], 0, 300);
                 }
             }
 
-            if ($deltaEntity === null) {
+            return $problems === [] ?: implode("\n    ", $problems);
+        });
+
+        // The inverse. The engine never hands a watermark to an entity declared `delta: false`,
+        // so a connector that filters one anyway either under-declares (every sync is a full one
+        // for no reason) or filters unconditionally, which is the shape of the bug that made
+        // MYOB Exo's credit sync miss records. Either way the declaration and the code disagree.
+        check('does not filter by date on an entity it says has no delta', function() use ($class, $connection, $makesRequests) {
+            if (!$makesRequests) {
                 return true;
             }
 
-            $recorder->reset();
-            /** @var Connector $connector */
-            $connector = new $class();
-            $connector->setConnection($connection);
-            $connector->useDouble($recorder);
+            $capabilities = $class::capabilities();
+            $problems = [];
 
-            $connector->fetchPage($deltaEntity, new FetchCriteria([
-                'since' => new DateTime('2026-01-15 08:30:00'),
-                'limit' => 5,
-            ]));
+            foreach ($capabilities->entities() as $entity) {
+                if ($capabilities->supportsDelta($entity) || !$capabilities->handles($entity, Direction::PULL)) {
+                    continue;
+                }
 
-            $business = $recorder->business();
+                $probe = deltaProbe($class, $connection, $entity);
 
-            if ($business === []) {
-                return 'no request was made';
+                if ($probe['error'] === null && $probe['sentDate']) {
+                    $problems[] = "$entity: declared delta: false but the request filtered by the since date — " . mb_substr($probe['serialised'], 0, 300);
+                }
             }
 
-            // A connector may resolve a company or a folder first; the date has to appear on
-            // one of the requests it makes, not necessarily the first.
-            $serialised = '';
-
-            foreach ($business as $request) {
-                $serialised .= $request['url']
-                    . json_encode($request['options']['query'] ?? [])
-                    . json_encode($request['options']['json'] ?? [])
-                    . (string)($request['options']['body'] ?? '');
-            }
-
-            // The date has to appear somewhere in the request, in some spelling. Every one of
-            // these APIs formats it differently; none of them can express it without the year,
-            // the month and the day.
-            $hasDate = str_contains($serialised, '2026')
-                && (str_contains($serialised, '01') || str_contains($serialised, '1/15'))
-                && str_contains($serialised, '15');
-
-            return $hasDate ?: "a delta request for $deltaEntity carried no date: " . mb_substr($serialised, 0, 300);
+            return $problems === [] ?: implode("\n    ", $problems);
         });
 
         check('a full page asks for another, and an empty one stops', function() use ($class, $connection, $recorder, $makesRequests) {
@@ -611,6 +777,52 @@ try {
 
             return $result->retryable === false
                 ?: 'a document the ERP refused is still marked retryable, so the queue will keep resending it';
+        });
+
+        // The empty-envelope double answers every duplicate lookup with "nothing here", so a
+        // connector that treats *any* row coming back as a match could never be caught — and
+        // that is the bug that made Visma report every order after the first as a duplicate,
+        // because its API ignored the filter and returned the latest order. Here every lookup
+        // finds exactly one order, and it is somebody else's.
+        check('a duplicate check does not treat an unrelated order as a match', function() use ($class, $connection, $makesRequests) {
+            if (!$makesRequests || !$class::capabilities()->handles(Entity::ORDER, Direction::PUSH)) {
+                return true;
+            }
+
+            $problems = [];
+            $threw = [];
+            $attempts = 0;
+
+            foreach (['plain', 'wrapped'] as $style) {
+                foreach (unrelatedOrderEnvelopes($style) as $shape => $body) {
+                    $attempts++;
+                    /** @var Connector $connector */
+                    $connector = new $class();
+                    $connector->setConnection($connection);
+                    $connector->useDouble(unrelatedOrderDouble($class, $body, $style));
+
+                    try {
+                        $result = $connector->pushDocument(Entity::ORDER, sampleOrder());
+                    } catch (Throwable $e) {
+                        // A shape this connector cannot read is not a verdict on duplicates;
+                        // crashing on it is what the "answers with a result" check is for.
+                        $threw[] = "$style/$shape: " . $e->getMessage();
+                        continue;
+                    }
+
+                    if ($result->duplicate) {
+                        $problems[] = "$style/$shape";
+                        $claimed = (string)$result->remoteId;
+                    }
+                }
+            }
+
+            if ($problems !== []) {
+                return 'an unrelated order was reported as this one already existing (claimed remote id “'
+                    . ($claimed ?? '') . '”), for envelopes: ' . implode(', ', $problems);
+            }
+
+            return count($threw) < $attempts ?: 'every attempt threw: ' . $threw[0];
         });
 
         check('an unreachable ERP is retryable, not a rejection', function() use ($class, $connection, $makesRequests) {

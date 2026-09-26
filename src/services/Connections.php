@@ -7,6 +7,8 @@ use craft\base\Component;
 use craft\db\Query;
 use craft\helpers\Db;
 use craft\helpers\StringHelper;
+use justinholtweb\erpy\auth\OAuth2AuthorizationCode;
+use justinholtweb\erpy\base\Connector;
 use justinholtweb\erpy\db\Table;
 use justinholtweb\erpy\models\Connection;
 use justinholtweb\erpy\records\ConnectionRecord;
@@ -120,7 +122,13 @@ class Connections extends Component
         // A blank secret in a posted form means "leave it alone", not "erase it". The CP never
         // sends a saved credential back to the browser, so it cannot send it back here either.
         $record->settings = json_encode($this->mergeSettings($connection, $isNew));
-        $record->tokens = json_encode($connection->tokens);
+
+        // Tokens belong to saveTokens() alone once a connection exists. The model being saved
+        // was loaded when the edit screen was, and a sync may have rotated Exact's refresh token
+        // since; writing the stale bag back would invalidate the connection on a routine save.
+        if ($isNew) {
+            $record->tokens = json_encode($connection->tokens);
+        }
 
         if ($isNew) {
             $record->sortOrder = (int)(new Query())->from(Table::CONNECTIONS)->max('[[sortOrder]]') + 1;
@@ -156,6 +164,21 @@ class Connections extends Component
             ->execute();
 
         $this->connections = null;
+    }
+
+    /**
+     * The consent state of a connection whose connector authenticates with an OAuth
+     * authorization-code grant, or null for every other connector — which is what decides
+     * whether the connection screen shows a Connect button at all.
+     *
+     * @return array{authorized:bool,hasClientCredentials:bool,authorizedAt:?\DateTime,accessExpiresAt:?\DateTime,refreshExpiresAt:?\DateTime}|null
+     */
+    public function oauthState(Connection $connection): ?array
+    {
+        $connector = $connection->getConnector();
+        $auth = $connector instanceof Connector ? $connector->auth() : null;
+
+        return $auth instanceof OAuth2AuthorizationCode ? $auth->describe() : null;
     }
 
     private function mergeSettings(Connection $connection, bool $isNew): array

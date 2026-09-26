@@ -78,8 +78,14 @@ class Sync extends Component
         // The watermark is read, and the run's start time is captured, *before* the first request
         // goes out. Advancing to anything later would open a window in which a record modified
         // mid-run is never seen again.
+        //
+        // A `since` is only ever handed to an entity the connector declares delta for. An entity
+        // declared `delta: false` is read in full every time — that is what the declaration
+        // means — and giving it a watermark anyway lets a connector whose paging filters
+        // unconditionally quietly turn a full read into a partial one.
         $startedAt = new DateTime();
-        $since = ($full || $ids) ? null : $cursors->watermark($connection, $entity, Direction::PULL);
+        $delta = $connector::capabilities()->supportsDelta($entity);
+        $since = ($full || $ids || !$delta) ? null : $cursors->watermark($connection, $entity, Direction::PULL);
 
         $run = $runs->start($connection, $entity, Direction::PULL, $trigger, $dryRun, $since?->format('c'));
 

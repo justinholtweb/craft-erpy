@@ -85,6 +85,9 @@ class ConnectionsController extends Controller
             'entities' => Entity::syncOrder(),
             'lastRuns' => $lastRuns,
             'redirectUri' => Plugin::redirectUri(),
+            // Null unless the connector needs a human to consent once, which is what decides
+            // whether the Connect button appears at all.
+            'oauth' => $plugin->getConnections()->oauthState($connection),
             'webhookUrl' => $connection->handle
                 ? \craft\helpers\UrlHelper::siteUrl('erpy/webhook/' . $connection->handle)
                 : null,

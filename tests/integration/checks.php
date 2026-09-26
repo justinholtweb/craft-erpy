@@ -26,8 +26,10 @@ use craft\commerce\elements\Product;
 use craft\commerce\elements\Variant;
 use craft\commerce\Plugin as Commerce;
 use craft\elements\User;
+use craft\events\RegisterComponentTypesEvent;
 use justinholtweb\erpy\auth\BasicAuth;
 use justinholtweb\erpy\auth\OAuth1Tba;
+use justinholtweb\erpy\auth\OAuth2AuthorizationCode;
 use justinholtweb\erpy\auth\OAuth2ClientCredentials;
 use justinholtweb\erpy\base\Capabilities;
 use justinholtweb\erpy\base\Direction;
@@ -196,6 +198,72 @@ function makeOrder(array $lines, bool $complete = true): Order
     }
 
     return $order;
+}
+
+/**
+ * An authorization-code connector for the checks: the mock's data behind Exact-style consent.
+ * Registered for this run only, so the connection screen can be asked whether it offers Connect.
+ */
+class OAuthDoubleConnector extends MockConnector
+{
+    public static function handle(): string
+    {
+        return 'erpy-oauth-double';
+    }
+
+    public static function displayName(): string
+    {
+        return 'OAuth double';
+    }
+
+    public static function settingsFields(): array
+    {
+        return [
+            Field::text('clientId', 'Client ID', ['required' => true]),
+            Field::secret('clientSecret', 'Client secret', ['required' => true]),
+        ];
+    }
+
+    protected function buildAuth(): ?justinholtweb\erpy\base\AuthInterface
+    {
+        return new OAuth2AuthorizationCode(
+            authorizeUrl: 'https://login.example.test/authorize',
+            tokenUrl: 'https://login.example.test/token',
+        );
+    }
+}
+
+/**
+ * The connection edit screen's content, rendered with the variables its controller passes.
+ *
+ * Only the `content` block: the CP layout wants a web request to read from and a console run
+ * has none. The block is the whole of what this plugin puts on the page.
+ */
+function renderEditScreen(Connection $connection, bool $canManage = true): string
+{
+    $plugin = Plugin::getInstance();
+    $connector = $connection->getConnector();
+    $view = Craft::$app->getView();
+    $mode = $view->getTemplateMode();
+    $view->setTemplateMode(craft\web\View::TEMPLATE_MODE_CP);
+
+    try {
+        return $view->getTwig()->load('erpy/connections/_edit')->renderBlock('content', [
+            'connection' => $connection,
+            'connector' => $connector ? $plugin->getConnectors()->describeOne($connection->connector) : null,
+            'connectors' => $plugin->getConnectors()->describe(),
+            'settingsFields' => $connector ? $connector::settingsFields() : [],
+            'capabilities' => $connector ? $connector::capabilities() : null,
+            'entities' => Entity::syncOrder(),
+            'lastRuns' => [],
+            'redirectUri' => Plugin::redirectUri(),
+            'oauth' => $plugin->getConnections()->oauthState($connection),
+            'webhookUrl' => null,
+            'canManage' => $canManage,
+        ]);
+    } finally {
+        $view->setTemplateMode($mode);
+    }
 }
 
 function saveMap(Connection $connection, string $entity, int $direction, array $options = [], array $rules = []): FieldMap
@@ -1214,6 +1282,27 @@ try {
             ?: "a delta run saw {$run->total()} records; a full one sees 8";
     });
 
+    check('the delta pull handed the connector the watermark it read', function() {
+        $asked = MockConnector::lastCriteria(Entity::PRODUCT);
+
+        return ($asked?->since !== null)
+            ?: 'an entity declared delta was fetched with no since, so every sync would be a full one';
+    });
+
+    check('an entity declared without delta is never handed a watermark', function() use ($plugin, $connection) {
+        // The mock declares credit `delta: false` but its paging filters on `since` whenever it
+        // is given one — exactly the connector shape that made a credit sync miss records. The
+        // engine must not give it the chance.
+        $plugin->getCursors()->advance($connection, Entity::CREDIT, Direction::PULL, new DateTime('-1 day'));
+
+        $run = $plugin->getSync()->run($connection, Entity::CREDIT, ['force' => true, 'dryRun' => true]);
+        $asked = MockConnector::lastCriteria(Entity::CREDIT);
+        $plugin->getCursors()->reset($connection, Entity::CREDIT);
+
+        return ($asked !== null && $asked->since === null && $run->cursorBefore === null)
+            ?: 'a non-delta entity was fetched with since ' . ($asked?->since?->format('c') ?? 'null') . ', run recorded ' . var_export($run->cursorBefore, true);
+    });
+
     check('a run that cannot be done is skipped with a reason, not crashed', function() use ($plugin, $connection) {
         $run = $plugin->getSync()->run($connection, Entity::SHIPMENT, ['force' => true]);
 
@@ -1396,6 +1485,81 @@ try {
 
         return $best->invoke($plugin->getPricing(), $connection, $sku, 1.0, $account) === null
             ?: 'a campaign price that ended yesterday is still being charged';
+    });
+
+    check('a base quantity break stays off the variant and applies only at its quantity', function() use ($plugin, $connection, $suffix) {
+        // Everybody's "buy 10" price is not everybody's price. Written to the variant it would
+        // be charged to a customer buying one.
+        $sku = "ERPY$suffix-0006";
+        $map = saveMap($connection, Entity::PRICE, Direction::PULL, ['writeBasePriceToVariant' => true]);
+        $variant = fn() => Variant::find()->sku($sku)->status(null)->one();
+
+        if (!$variant()) {
+            return "no fixture variant $sku";
+        }
+
+        $plugin->getCatalog()->applyPrice($connection, new ErpPrice(['sku' => $sku, 'unitPrice' => 20.00]), $map);
+        $plugin->getCatalog()->applyPrice($connection, new ErpPrice(['sku' => $sku, 'minQuantity' => 10, 'unitPrice' => 12.34]), $map);
+
+        $base = (float)$variant()->basePrice;
+
+        if (abs($base - 20.00) > 0.0001) {
+            return "the variant's base price is $base — a quantity break overwrote the price for everybody";
+        }
+
+        $best = new ReflectionMethod(\justinholtweb\erpy\services\Pricing::class, 'bestRow');
+        $best->setAccessible(true);
+        $plugin->getPricing()->resetMemo();
+        $one = $best->invoke($plugin->getPricing(), $connection, $sku, 1.0, null);
+        $ten = $best->invoke($plugin->getPricing(), $connection, $sku, 10.0, null);
+
+        return ($one === null && (float)($ten['unitPrice'] ?? 0) === 12.34)
+            ?: 'at 1: ' . json_encode($one['unitPrice'] ?? null) . ', at 10: ' . json_encode($ten['unitPrice'] ?? null);
+    });
+
+    check('a dated base price is a promotion, resolved at cart time rather than written to the variant', function() use ($plugin, $connection, $suffix) {
+        $sku = "ERPY$suffix-0006";
+        $map = $plugin->getMapping()->get($connection, Entity::PRICE, Direction::PULL);
+
+        $plugin->getCatalog()->applyPrice($connection, new ErpPrice([
+            'sku' => $sku,
+            'unitPrice' => 15.00,
+            'startsAt' => new DateTime('-1 day'),
+            'endsAt' => new DateTime('+6 days'),
+        ]), $map);
+
+        $base = (float)Variant::find()->sku($sku)->status(null)->one()->basePrice;
+        $best = new ReflectionMethod(\justinholtweb\erpy\services\Pricing::class, 'bestRow');
+        $best->setAccessible(true);
+        $plugin->getPricing()->resetMemo();
+        $row = $best->invoke($plugin->getPricing(), $connection, $sku, 1.0, null);
+
+        return (abs($base - 20.00) < 0.0001 && (float)($row['unitPrice'] ?? 0) === 15.00)
+            ?: "variant $base, cart-time " . json_encode($row['unitPrice'] ?? null) . ' — a promotion would outlive its window on the variant';
+    });
+
+    check('a customer’s own price list beats a base quantity break', function() use ($plugin, $connection, $suffix) {
+        $sku = "ERPY$suffix-0006";
+        $map = $plugin->getMapping()->get($connection, Entity::PRICE, Direction::PULL);
+
+        $plugin->getCatalog()->applyPrice($connection, new ErpPrice([
+            'sku' => $sku,
+            'priceListCode' => "LIST$suffix",
+            'unitPrice' => 18.00,
+        ]), $map);
+
+        Craft::$app->getDb()->createCommand()->update(Table::ACCOUNTS, [
+            'priceListCode' => "LIST$suffix",
+        ], ['connectionId' => $connection->id, 'customerCode' => 'CUST-OTHER'])->execute();
+
+        $account = $plugin->getAccounts()->getByCustomerCode($connection, 'CUST-OTHER');
+        $best = new ReflectionMethod(\justinholtweb\erpy\services\Pricing::class, 'bestRow');
+        $best->setAccessible(true);
+        $plugin->getPricing()->resetMemo();
+        $row = $best->invoke($plugin->getPricing(), $connection, $sku, 10.0, $account);
+
+        return (float)($row['unitPrice'] ?? 0) === 18.00
+            ?: 'got ' . json_encode($row['unitPrice'] ?? null) . ' — everybody’s break outranked the customer’s negotiated list';
     });
 
     // -----------------------------------------------------------------------------------------
@@ -1675,6 +1839,23 @@ try {
     // -----------------------------------------------------------------------------------------
     section('The log');
 
+    check('a log write that the database refuses never reaches the caller', function() use ($plugin) {
+        // A connection id that no row has breaks the foreign key — the shape of the failure seen
+        // when a note was written for a connection that was never saved.
+        $ghost = new Connection(['id' => 2147480000, 'handle' => 'ghost-log']);
+
+        try {
+            $plugin->getLog()->note($ghost, 'should be dropped, not thrown');
+            $plugin->getLog()->error($ghost, 'should be dropped, not thrown');
+            $plugin->getLog()->request($ghost, null, 'GET', 'https://x.test', [], '', 500, '', 1, 'boom');
+        } catch (Throwable $e) {
+            return 'a log write threw ' . get_class($e) . ': ' . $e->getMessage();
+        }
+
+        return (int)(new craft\db\Query())->from(Table::LOG)->where(['connectionId' => $ghost->id])->count() === 0
+            ?: 'a row was written for a connection that does not exist';
+    });
+
     check('requests are recorded against their run', function() use ($plugin, $connection) {
         $count = (new craft\db\Query())
             ->from(Table::LOG)
@@ -1767,6 +1948,112 @@ try {
 
         return ((int)$ancient === 0 && (int)$recent > 0) ?: "ancient $ancient, recent $recent";
     });
+
+    // -----------------------------------------------------------------------------------------
+    section('Connecting an OAuth ERP');
+
+    // Registered for this section only; the registry caches, so it is told to look again.
+    $registerDouble = static function(RegisterComponentTypesEvent $event) {
+        $event->types[] = OAuthDoubleConnector::class;
+    };
+    $forgetRegistry = static function() use ($plugin) {
+        $property = new ReflectionProperty($plugin->getConnectors(), 'connectors');
+        $property->setAccessible(true);
+        $property->setValue($plugin->getConnectors(), null);
+    };
+    yii\base\Event::on(justinholtweb\erpy\services\Connectors::class, justinholtweb\erpy\services\Connectors::EVENT_REGISTER_CONNECTORS, $registerDouble);
+    $forgetRegistry();
+
+    $oauthConnection = static fn(array $tokens = [], bool $saved = true) => new Connection([
+        'id' => $saved ? 990001 : null,
+        'uid' => 'erpy-oauth-check-' . $suffix,
+        'name' => 'OAuth check',
+        'handle' => "oauthcheck$suffix",
+        'connector' => 'erpy-oauth-double',
+        'settings' => ['clientId' => 'client-1', 'clientSecret' => 'secret-1'],
+        'tokens' => $tokens,
+    ]);
+
+    try {
+        check('an authorization-code connection that has not consented offers Connect', function() use ($oauthConnection) {
+            $html = renderEditScreen($oauthConnection());
+
+            return (str_contains($html, 'id="erpy-oauth-connect"')
+                && str_contains($html, 'erpy/oauth/connect')
+                && preg_match('/id="erpy-oauth-connect"[^>]*>\s*Connect\s*<\/a>/', $html) === 1
+                && str_contains($html, 'Not connected'))
+                ?: 'the edit screen has no Connect button, so consent can never start';
+        });
+
+        check('a connected one says so, and offers Reconnect and Disconnect instead', function() use ($oauthConnection) {
+            $html = renderEditScreen($oauthConnection(['refreshToken' => 'r-1', 'obtainedAt' => time()]));
+
+            return (preg_match('/id="erpy-oauth-connect"[^>]*>\s*Reconnect\s*<\/a>/', $html) === 1
+                && str_contains($html, 'erpy-oauth-disconnect')
+                && str_contains($html, 'Connected'))
+                ?: 'a connected connection still reads as not connected';
+        });
+
+        check('an unsaved connection cannot be connected yet', function() use ($oauthConnection) {
+            $html = renderEditScreen($oauthConnection([], false));
+
+            return (!str_contains($html, 'erpy-oauth-connect') && str_contains($html, 'id="erpy-oauth"'))
+                ?: 'Connect was offered before there is a row for the tokens to land on';
+        });
+
+        check('somebody who cannot manage connections sees the state but no button', function() use ($oauthConnection) {
+            $html = renderEditScreen($oauthConnection(), false);
+
+            return (!str_contains($html, 'erpy-oauth-connect') && str_contains($html, 'Not connected'))
+                ?: 'the button was shown to a user the connect action would refuse';
+        });
+
+        check('a connector that does not use consent gets no Connect control at all', function() use ($connection) {
+            $html = renderEditScreen($connection);
+
+            return (!str_contains($html, 'id="erpy-oauth"') && str_contains($html, 'erpy-test'))
+                ?: 'the mock ERP was offered an OAuth consent it does not have';
+        });
+
+        check('the consent URL carries the client, the callback and the state', function() use ($oauthConnection) {
+            $auth = $oauthConnection()->getConnector()->auth();
+            parse_str((string)parse_url($auth->authorizationUrl('state-123'), PHP_URL_QUERY), $query);
+
+            return (($query['client_id'] ?? null) === 'client-1'
+                && ($query['redirect_uri'] ?? null) === Plugin::redirectUri()
+                && ($query['state'] ?? null) === 'state-123'
+                && ($query['response_type'] ?? null) === 'code')
+                ?: json_encode($query);
+        });
+
+        check('the callback’s code exchange stores the refresh token and reads as connected', function() use ($oauthConnection) {
+            $connection = $oauthConnection();
+            $auth = $connection->getConnector()->auth();
+            $auth->setTransport((new Transport())->setDouble(fn() => Response::json(200, [
+                'access_token' => 'a-1',
+                'refresh_token' => 'r-1',
+                'expires_in' => 600,
+                'refresh_token_expires_in' => 86400,
+            ])));
+
+            $ok = $auth->exchangeCode('code-1');
+            $state = $auth->describe();
+
+            return ($ok && $state['authorized'] && $state['authorizedAt'] && $state['accessExpiresAt'] && $state['refreshExpiresAt'])
+                ?: json_encode($state);
+        });
+
+        check('testing before consent points at the Connect button, not at a missing field', function() use ($oauthConnection) {
+            $result = $oauthConnection()->getConnector()->test();
+            $text = $result->message . ' ' . implode(' ', $result->hints);
+
+            return (!$result->ok && str_contains($text, 'Connect') && !str_contains($text, 'required field'))
+                ?: $text;
+        });
+    } finally {
+        yii\base\Event::off(justinholtweb\erpy\services\Connectors::class, justinholtweb\erpy\services\Connectors::EVENT_REGISTER_CONNECTORS, $registerDouble);
+        $forgetRegistry();
+    }
 
     // -----------------------------------------------------------------------------------------
     section('The connector registry');

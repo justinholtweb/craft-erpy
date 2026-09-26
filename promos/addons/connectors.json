@@ -1,0 +1,2986 @@
+{
+    "acumatica": {
+        "class": "justinholtweb\\erpyacumatica\\connectors\\AcumaticaConnector",
+        "name": "Acumatica",
+        "vendor": "Acumatica",
+        "description": "Acumatica Cloud ERP through the contract-based REST endpoint, with a shared session so the licence is not spent on logins.",
+        "capabilities": {
+            "entities": {
+                "customer": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "product": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "inventory": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 500,
+                    "batch": false
+                },
+                "order": {
+                    "direction": 2,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "orderStatus": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "shipment": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "invoice": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "credit": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 200,
+                    "batch": false
+                }
+            },
+            "webhooks": false,
+            "multiCompany": true,
+            "sandbox": true
+        },
+        "fields": [
+            {
+                "type": "url",
+                "name": "instanceUrl",
+                "label": "Instance URL",
+                "instructions": "No trailing path — Erpy adds the endpoint itself.",
+                "required": true,
+                "default": "",
+                "placeholder": "https://example.acumatica.com",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "endpointVersion",
+                "label": "Endpoint version",
+                "instructions": "From System → Integration → Web Service Endpoints. Use the Default endpoint’s version.",
+                "required": true,
+                "default": "20.200.001",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Sign in",
+                "instructions": "Use a dedicated integration user. Acumatica counts concurrent sessions against your licence, and sharing a person’s login means their password change breaks the storefront.",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "username",
+                "label": "Username",
+                "instructions": "",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "password",
+                "label": "Password",
+                "instructions": "Store this in an environment variable rather than in the database.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "company",
+                "label": "Company / tenant",
+                "instructions": "Leave blank on a single-tenant instance.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "branch",
+                "label": "Branch",
+                "instructions": "Leave blank to use the user’s default branch.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Behaviour",
+                "instructions": "",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "warehouse",
+                "label": "Warehouse",
+                "instructions": "The warehouse stock is read from and orders are raised against.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "orderType",
+                "label": "Sales order type",
+                "instructions": "The order type new orders are created as.",
+                "required": false,
+                "default": "SO",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "boolean",
+                "name": "holdNewOrders",
+                "label": "Create orders on hold",
+                "instructions": "On is the safe default: an order on hold can be reviewed before it is committed to a warehouse.",
+                "required": false,
+                "default": true,
+                "secret": false,
+                "suggestEnvVars": false
+            }
+        ]
+    },
+    "afas": {
+        "class": "justinholtweb\\erpyafas\\connectors\\AfasConnector",
+        "name": "AFAS Profit",
+        "vendor": "AFAS",
+        "description": "AFAS Profit through GetConnectors and UpdateConnectors, with every connector and field name configurable — because in AFAS they always are.",
+        "capabilities": {
+            "entities": {
+                "customer": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "product": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "price": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "inventory": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "order": {
+                    "direction": 2,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "orderStatus": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "credit": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                }
+            },
+            "webhooks": false,
+            "multiCompany": false,
+            "sandbox": false
+        },
+        "fields": [
+            {
+                "type": "text",
+                "name": "environmentId",
+                "label": "Environment ID",
+                "instructions": "The number in your AFAS URL. Erpy builds the REST host from it.",
+                "required": true,
+                "default": "",
+                "placeholder": "12345",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "select",
+                "name": "environmentType",
+                "label": "Environment",
+                "options": {
+                    "live": "Production",
+                    "test": "Test",
+                    "accept": "Acceptance"
+                },
+                "instructions": "",
+                "required": false,
+                "default": "live",
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "token",
+                "label": "App Connector token",
+                "instructions": "Paste the token value only — the part between <data> and </data> in the XML AFAS gave you. Erpy wraps and encodes it.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "GetConnectors",
+                "instructions": "AFAS has no fixed schema: a GetConnector is built by your implementation partner. These are the names AFAS’s own standard connectors use — change any that differ, and correct individual field names on the mapping screen.",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "itemsConnector",
+                "label": "Items",
+                "instructions": "",
+                "required": false,
+                "default": "Profit_Artikelen",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "stockConnector",
+                "label": "Stock",
+                "instructions": "",
+                "required": false,
+                "default": "Profit_Voorraad",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "customersConnector",
+                "label": "Customers",
+                "instructions": "",
+                "required": false,
+                "default": "Profit_Debiteuren",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "pricesConnector",
+                "label": "Prices",
+                "instructions": "",
+                "required": false,
+                "default": "Profit_Verkoopprijzen",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "ordersConnector",
+                "label": "Sales orders",
+                "instructions": "",
+                "required": false,
+                "default": "Profit_Verkooporders",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Field names",
+                "instructions": "",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "modifiedField",
+                "label": "Modified field",
+                "instructions": "Used for delta syncs. Leave blank if your connectors do not expose one — every sync then reads everything, which Erpy’s change detection makes cheap.",
+                "required": false,
+                "default": "Bijgewerkt",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "skuField",
+                "label": "Item code field",
+                "instructions": "",
+                "required": false,
+                "default": "Itemcode",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "customerCodeField",
+                "label": "Customer number field",
+                "instructions": "",
+                "required": false,
+                "default": "Debiteurnummer",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "orderReferenceField",
+                "label": "Order reference field",
+                "instructions": "The field on the sales orders GetConnector that holds the customer reference (RfCs), where Erpy writes the Commerce order number. Order status is matched on it, and it is checked before an order is created so a retry cannot post the same order twice.",
+                "required": false,
+                "default": "Referentie",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Sales orders",
+                "instructions": "",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "salesOrderConnector",
+                "label": "UpdateConnector",
+                "instructions": "The UpdateConnector new sales orders are posted to.",
+                "required": false,
+                "default": "FbSales",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "warehouse",
+                "label": "Warehouse",
+                "instructions": "",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            }
+        ]
+    },
+    "mock": {
+        "class": "justinholtweb\\erpy\\connectors\\MockConnector",
+        "name": "Mock ERP",
+        "vendor": "Erpy",
+        "description": "A pretend ERP with deterministic data. Use it to try the mapping and sync screens, or to prove a problem is in the connector rather than in Erpy.",
+        "capabilities": {
+            "entities": {
+                "customer": {
+                    "direction": 3,
+                    "delta": true,
+                    "pageSize": 50,
+                    "batch": false
+                },
+                "product": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 50,
+                    "batch": false
+                },
+                "price": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "inventory": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "order": {
+                    "direction": 2,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "orderStatus": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 50,
+                    "batch": false
+                },
+                "shipment": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 50,
+                    "batch": false
+                },
+                "invoice": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 50,
+                    "batch": false
+                },
+                "payment": {
+                    "direction": 3,
+                    "delta": false,
+                    "pageSize": 50,
+                    "batch": false
+                },
+                "credit": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 50,
+                    "batch": false
+                }
+            },
+            "webhooks": false,
+            "multiCompany": false,
+            "sandbox": true
+        },
+        "fields": [
+            {
+                "type": "number",
+                "name": "itemCount",
+                "label": "Items to invent",
+                "instructions": "How many products, prices and stock lines this pretend ERP holds.",
+                "required": false,
+                "default": 25,
+                "min": 0,
+                "max": 5000,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "skuPrefix",
+                "label": "SKU prefix",
+                "instructions": "",
+                "required": false,
+                "default": "MOCK-",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "number",
+                "name": "failEvery",
+                "label": "Fail every Nth record",
+                "instructions": "For trying out the dead-letter screen. Zero never fails.",
+                "required": false,
+                "default": 0,
+                "min": 0,
+                "max": null,
+                "secret": false,
+                "suggestEnvVars": false
+            }
+        ]
+    },
+    "exact-online": {
+        "class": "justinholtweb\\erpyexactonline\\connectors\\ExactOnlineConnector",
+        "name": "Exact Online",
+        "vendor": "Exact",
+        "description": "Exact Online through the REST API, with the OAuth consent step and the rotating refresh token handled for you.",
+        "capabilities": {
+            "entities": {
+                "customer": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 60,
+                    "batch": false
+                },
+                "product": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 60,
+                    "batch": false
+                },
+                "price": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 60,
+                    "batch": false
+                },
+                "inventory": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 60,
+                    "batch": false
+                },
+                "order": {
+                    "direction": 2,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "orderStatus": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 60,
+                    "batch": false
+                },
+                "shipment": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 60,
+                    "batch": false
+                },
+                "invoice": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 60,
+                    "batch": false
+                },
+                "credit": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 60,
+                    "batch": false
+                }
+            },
+            "webhooks": false,
+            "multiCompany": true,
+            "sandbox": false
+        },
+        "fields": [
+            {
+                "type": "select",
+                "name": "region",
+                "label": "Region",
+                "options": {
+                    "nl": "Netherlands (start.exactonline.nl)",
+                    "be": "Belgium (start.exactonline.be)",
+                    "de": "Germany (start.exactonline.de)",
+                    "fr": "France (start.exactonline.fr)",
+                    "es": "Spain (start.exactonline.es)",
+                    "co.uk": "United Kingdom (start.exactonline.co.uk)",
+                    "com": "United States (start.exactonline.com)"
+                },
+                "instructions": "Exact runs a separate installation per country and they do not share data. Pick the one your login belongs to.",
+                "required": true,
+                "default": "nl",
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "App registration",
+                "instructions": "Register an app in the Exact App Centre and set its redirect URI to exactly the value below — Exact compares it character for character.",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "copyable",
+                "name": "redirectUri",
+                "label": "Redirect URI",
+                "value": "https://plugin-testing.ddev.site/erpy/oauth/callback",
+                "instructions": "",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "clientId",
+                "label": "Client ID",
+                "instructions": "",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "clientSecret",
+                "label": "Client secret",
+                "instructions": "Store this in an environment variable rather than in the database.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Company",
+                "instructions": "",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "division",
+                "label": "Division",
+                "instructions": "The numeric division code. Leave blank and it is looked up from the login’s current division once per run — but set it explicitly before going live: the current division is whichever one the user last opened in Exact, and a wrong division returns an empty, entirely successful response.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "warehouse",
+                "label": "Warehouse code",
+                "instructions": "Stock is read from this warehouse. Leave blank for the company total.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            }
+        ]
+    },
+    "business-central": {
+        "class": "justinholtweb\\erpybusinesscentral\\connectors\\BusinessCentralConnector",
+        "name": "Dynamics 365 Business Central",
+        "vendor": "Microsoft",
+        "description": "Microsoft’s mid-market ERP, through the standard API v2.0 and an Entra ID app registration.",
+        "capabilities": {
+            "entities": {
+                "customer": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "product": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "price": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "inventory": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "order": {
+                    "direction": 2,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "orderStatus": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "shipment": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "invoice": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "credit": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                }
+            },
+            "webhooks": false,
+            "multiCompany": true,
+            "sandbox": true
+        },
+        "fields": [
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Entra ID application",
+                "instructions": "Register an application in Entra ID, grant it the Business Central API permission, then grant the resulting application access inside Business Central itself under Microsoft Entra Applications.",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "tenantId",
+                "label": "Tenant ID",
+                "instructions": "The GUID of your Microsoft 365 tenant.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "clientId",
+                "label": "Application (client) ID",
+                "instructions": "",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "clientSecret",
+                "label": "Client secret",
+                "instructions": "Store this in an environment variable rather than in the database.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Environment",
+                "instructions": "",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "environment",
+                "label": "Environment name",
+                "instructions": "As it appears in the Business Central admin centre — “Production”, “Sandbox”, or whatever yours is called.",
+                "required": true,
+                "default": "Production",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "companyName",
+                "label": "Company",
+                "instructions": "The Business Central company to read and write. Leave the display name exactly as it appears in the company list.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Optional endpoints",
+                "instructions": "Business Central’s standard API does not expose sales prices or posted shipment tracking numbers. If you need either, publish a page as an API in your own extension and name it here; leave blank and Erpy will simply not sync that entity.",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "pricesEndpoint",
+                "label": "Sales prices endpoint",
+                "instructions": "Relative to the company. Must expose itemNo, unitPrice, and optionally customerNo, customerPriceGroup, minimumQuantity, startingDate and endingDate.",
+                "required": false,
+                "default": "",
+                "placeholder": "salesPrices",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "shipmentsEndpoint",
+                "label": "Posted shipments endpoint",
+                "instructions": "Relative to the company. Must expose orderNo, no and lastModifiedDateTime (the record’s SystemModifiedAt, which delta syncs filter on), and optionally externalDocumentNo, packageTrackingNo, shippingAgentCode and postingDate.",
+                "required": false,
+                "default": "",
+                "placeholder": "salesShipments",
+                "secret": false,
+                "suggestEnvVars": true
+            }
+        ]
+    },
+    "myob-acumatica": {
+        "class": "justinholtweb\\erpymyob\\connectors\\MyobAcumaticaConnector",
+        "name": "MYOB Acumatica (Advanced)",
+        "vendor": "MYOB",
+        "description": "MYOB Acumatica — previously MYOB Advanced — through the contract-based REST endpoint.",
+        "capabilities": {
+            "entities": {
+                "customer": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "product": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "inventory": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 500,
+                    "batch": false
+                },
+                "order": {
+                    "direction": 2,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "orderStatus": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "shipment": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "invoice": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "credit": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 200,
+                    "batch": false
+                }
+            },
+            "webhooks": false,
+            "multiCompany": true,
+            "sandbox": false
+        },
+        "fields": [
+            {
+                "type": "url",
+                "name": "instanceUrl",
+                "label": "Instance URL",
+                "instructions": "",
+                "required": true,
+                "default": "",
+                "placeholder": "https://example.myobadvanced.com",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "endpointVersion",
+                "label": "Endpoint version",
+                "instructions": "From Integration → Web Service Endpoints, using the Default endpoint.",
+                "required": true,
+                "default": "20.200.001",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "username",
+                "label": "Username",
+                "instructions": "",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "password",
+                "label": "Password",
+                "instructions": "Store this in an environment variable rather than in the database.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "company",
+                "label": "Company / tenant",
+                "instructions": "",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "branch",
+                "label": "Branch",
+                "instructions": "",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Behaviour",
+                "instructions": "",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "warehouse",
+                "label": "Warehouse",
+                "instructions": "",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "orderType",
+                "label": "Sales order type",
+                "instructions": "",
+                "required": false,
+                "default": "SO",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "boolean",
+                "name": "holdNewOrders",
+                "label": "Create orders on hold",
+                "instructions": "",
+                "required": false,
+                "default": true,
+                "secret": false,
+                "suggestEnvVars": false
+            }
+        ]
+    },
+    "myob-exo": {
+        "class": "justinholtweb\\erpymyob\\connectors\\MyobExoConnector",
+        "name": "MYOB Exo",
+        "vendor": "MYOB",
+        "description": "MYOB Exo Business through the Exo API gateway.",
+        "capabilities": {
+            "entities": {
+                "customer": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "product": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "inventory": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "order": {
+                    "direction": 2,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "orderStatus": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "credit": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                }
+            },
+            "webhooks": false,
+            "multiCompany": false,
+            "sandbox": false
+        },
+        "fields": [
+            {
+                "type": "url",
+                "name": "apiUrl",
+                "label": "API URL",
+                "instructions": "The hosted gateway, or your own Exo API host for an on-premise deployment.",
+                "required": true,
+                "default": "https://exo.api.myob.com",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Credentials",
+                "instructions": "Exo needs three separate things and gives the same 401 when any one is missing.",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "developerKey",
+                "label": "Developer key",
+                "instructions": "Identifies your integration. Sent as x-myobapi-key.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "exoUser",
+                "label": "Exo username",
+                "instructions": "",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "exoPassword",
+                "label": "Exo password",
+                "instructions": "Store this in an environment variable rather than in the database.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "accountUser",
+                "label": "MYOB account email",
+                "instructions": "Only needed on a hosted install, where the gateway also wants Basic credentials.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "accountPassword",
+                "label": "MYOB account password",
+                "instructions": "Store this in an environment variable rather than in the database.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Behaviour",
+                "instructions": "",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "branchId",
+                "label": "Branch",
+                "instructions": "",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "locationId",
+                "label": "Stock location",
+                "instructions": "The numeric location id stock is read from.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            }
+        ]
+    },
+    "odoo": {
+        "class": "justinholtweb\\erpyodoo\\connectors\\OdooConnector",
+        "name": "Odoo",
+        "vendor": "Odoo",
+        "description": "Odoo Community or Enterprise through the external JSON-RPC API, using an API key rather than a password.",
+        "capabilities": {
+            "entities": {
+                "customer": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "product": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "price": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "inventory": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 500,
+                    "batch": false
+                },
+                "order": {
+                    "direction": 2,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "orderStatus": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "shipment": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "invoice": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "credit": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 200,
+                    "batch": false
+                }
+            },
+            "webhooks": false,
+            "multiCompany": true,
+            "sandbox": true
+        },
+        "fields": [
+            {
+                "type": "url",
+                "name": "url",
+                "label": "Odoo URL",
+                "instructions": "",
+                "required": true,
+                "default": "",
+                "placeholder": "https://example.odoo.com",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "database",
+                "label": "Database",
+                "instructions": "On Odoo Online this is usually the subdomain.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "username",
+                "label": "Login",
+                "instructions": "The email address of a dedicated integration user.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "apiKey",
+                "label": "API key",
+                "instructions": "Generate one under the user’s Preferences → Account Security. An API key works everywhere a password does and can be revoked on its own.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Behaviour",
+                "instructions": "",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "warehouseId",
+                "label": "Warehouse ID",
+                "instructions": "The numeric id of the stock location stock is read from. Leave blank for all internal locations.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "pricelistId",
+                "label": "Base pricelist ID",
+                "instructions": "Usually your public pricelist. Its items are left out of contract pricing — the Commerce base price comes from each product’s Sales Price. Every other pricelist becomes contract pricing.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "salesTeamId",
+                "label": "Sales team ID",
+                "instructions": "Optional. Web orders are often given their own team so they can be reported on separately.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "boolean",
+                "name": "confirmOrders",
+                "label": "Confirm orders on arrival",
+                "instructions": "Off leaves them as quotations for someone to review. On confirms them, which reserves stock immediately.",
+                "required": false,
+                "default": false,
+                "secret": false,
+                "suggestEnvVars": false
+            }
+        ]
+    },
+    "netsuite": {
+        "class": "justinholtweb\\erpynetsuite\\connectors\\NetSuiteConnector",
+        "name": "NetSuite",
+        "vendor": "Oracle",
+        "description": "Oracle NetSuite through SuiteTalk REST, with bulk reads done in SuiteQL so a large catalogue does not take all night.",
+        "capabilities": {
+            "entities": {
+                "customer": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 1000,
+                    "batch": false
+                },
+                "product": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 1000,
+                    "batch": false
+                },
+                "price": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 1000,
+                    "batch": false
+                },
+                "inventory": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 1000,
+                    "batch": false
+                },
+                "order": {
+                    "direction": 2,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "orderStatus": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 1000,
+                    "batch": false
+                },
+                "shipment": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 1000,
+                    "batch": false
+                },
+                "invoice": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 1000,
+                    "batch": false
+                },
+                "credit": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 1000,
+                    "batch": false
+                }
+            },
+            "webhooks": false,
+            "multiCompany": true,
+            "sandbox": true
+        },
+        "fields": [
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Account",
+                "instructions": "Setup → Company → Company Information shows your account id. A sandbox looks like 1234567_SB1.",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "accountId",
+                "label": "Account ID",
+                "instructions": "",
+                "required": true,
+                "default": "",
+                "placeholder": "1234567",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Token-Based Authentication",
+                "instructions": "Create an integration record under Setup → Integration → Manage Integrations with Token-Based Authentication enabled, then create an access token for it under Setup → Users/Roles → Access Tokens. NetSuite shows each secret once and never again.",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "consumerKey",
+                "label": "Consumer key",
+                "instructions": "Store this in an environment variable rather than in the database.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "consumerSecret",
+                "label": "Consumer secret",
+                "instructions": "Store this in an environment variable rather than in the database.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "tokenId",
+                "label": "Token ID",
+                "instructions": "Store this in an environment variable rather than in the database.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "tokenSecret",
+                "label": "Token secret",
+                "instructions": "Store this in an environment variable rather than in the database.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Behaviour",
+                "instructions": "",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "subsidiaryId",
+                "label": "Subsidiary internal ID",
+                "instructions": "Required on OneWorld accounts. Leave blank on a single-subsidiary account.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "locationId",
+                "label": "Location internal ID",
+                "instructions": "The location orders are raised against, and the one stock is read from.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "itemTypes",
+                "label": "Item types to sync",
+                "instructions": "NetSuite item types, comma separated. Service and other non-sellable types are usually best left out.",
+                "required": false,
+                "default": "InvtPart,NonInvtPart,Assembly,Kit",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "categoryField",
+                "label": "Item category field",
+                "instructions": "The id of a custom item field holding the product category, if you have one. Leave blank and no category is read — NetSuite refuses a whole query that names a field the account does not have.",
+                "required": false,
+                "default": "",
+                "placeholder": "custitem_web_category",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "orderReferenceField",
+                "label": "Order reference field",
+                "instructions": "Orders Erpy creates are matched by their External ID. Only name a custom transaction body field here if another integration also raises web orders and keeps the Commerce order number in it.",
+                "required": false,
+                "default": "",
+                "placeholder": "custbody_web_order_number",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "boolean",
+                "name": "orderApproved",
+                "label": "Create orders already approved",
+                "instructions": "Off means orders land pending approval, which is what most finance teams want to start with.",
+                "required": false,
+                "default": false,
+                "secret": false,
+                "suggestEnvVars": false
+            }
+        ]
+    },
+    "priority": {
+        "class": "justinholtweb\\erpypriority\\connectors\\PriorityConnector",
+        "name": "Priority",
+        "vendor": "Priority Software",
+        "description": "Priority ERP through its OData interface, with every form name configurable because no two Priority installations are alike.",
+        "capabilities": {
+            "entities": {
+                "customer": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "product": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "inventory": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "order": {
+                    "direction": 2,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "orderStatus": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "invoice": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "credit": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                }
+            },
+            "webhooks": false,
+            "multiCompany": true,
+            "sandbox": false
+        },
+        "fields": [
+            {
+                "type": "url",
+                "name": "serverUrl",
+                "label": "Priority server URL",
+                "instructions": "The host only — Erpy adds the OData path.",
+                "required": true,
+                "default": "",
+                "placeholder": "https://priority.example.com",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "company",
+                "label": "Company",
+                "instructions": "The Priority company (database) name, as it appears in the OData URL.",
+                "required": true,
+                "default": "",
+                "placeholder": "demo",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "tabulaIni",
+                "label": "Configuration file",
+                "instructions": "Almost always tabula.ini. Change it only if your installation says otherwise.",
+                "required": false,
+                "default": "tabula.ini",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "username",
+                "label": "Username",
+                "instructions": "",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "password",
+                "label": "Password",
+                "instructions": "Store this in an environment variable rather than in the database.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Forms",
+                "instructions": "Priority exposes its screens rather than an abstracted API, and installations differ. These are the standard names; change any that your implementation renamed.",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "itemsForm",
+                "label": "Items form",
+                "instructions": "",
+                "required": false,
+                "default": "LOGPART",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "stockForm",
+                "label": "Stock balance form",
+                "instructions": "",
+                "required": false,
+                "default": "WARHSBAL",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "customersForm",
+                "label": "Customers form",
+                "instructions": "",
+                "required": false,
+                "default": "CUSTOMERS",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "ordersForm",
+                "label": "Sales orders form",
+                "instructions": "",
+                "required": false,
+                "default": "ORDERS",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "orderLinesForm",
+                "label": "Order lines sub-form",
+                "instructions": "",
+                "required": false,
+                "default": "ORDERITEMS_SUBFORM",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "invoicesForm",
+                "label": "Invoices form",
+                "instructions": "",
+                "required": false,
+                "default": "AINVOICES",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Behaviour",
+                "instructions": "",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "warehouse",
+                "label": "Warehouse",
+                "instructions": "Stock is read from this warehouse. Leave blank to read every warehouse.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "priceList",
+                "label": "Price list",
+                "instructions": "The price list new orders are raised against.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            }
+        ]
+    },
+    "sage-200": {
+        "class": "justinholtweb\\erpysage\\connectors\\Sage200Connector",
+        "name": "Sage 200",
+        "vendor": "Sage",
+        "description": "Sage 200 Standard and Professional through the Sage 200 API.",
+        "capabilities": {
+            "entities": {
+                "customer": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "product": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "inventory": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "order": {
+                    "direction": 2,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "orderStatus": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "invoice": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "credit": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                }
+            },
+            "webhooks": false,
+            "multiCompany": true,
+            "sandbox": false
+        },
+        "fields": [
+            {
+                "type": "select",
+                "name": "edition",
+                "label": "Edition",
+                "options": {
+                    "professional": "Sage 200 Professional",
+                    "standard": "Sage 200 Standard"
+                },
+                "instructions": "The two editions answer on different API paths. UK and Irish companies use the same ones.",
+                "required": false,
+                "default": "professional",
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Sage application",
+                "instructions": "Register an app on the Sage developer portal and set its callback to exactly the value below.",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "copyable",
+                "name": "redirectUri",
+                "label": "Callback URL",
+                "value": "https://plugin-testing.ddev.site/erpy/oauth/callback",
+                "instructions": "",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "clientId",
+                "label": "Client ID",
+                "instructions": "",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "clientSecret",
+                "label": "Client secret",
+                "instructions": "Store this in an environment variable rather than in the database.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "subscriptionKey",
+                "label": "Subscription key",
+                "instructions": "The Ocp-Apim-Subscription-Key from your Sage developer account. It identifies the application, not the customer.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Site",
+                "instructions": "",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "siteId",
+                "label": "Site ID",
+                "instructions": "Sent as the X-Site header. Without it a perfectly authenticated request returns nothing rather than an error.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "warehouse",
+                "label": "Warehouse",
+                "instructions": "",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            }
+        ]
+    },
+    "sage-accounting": {
+        "class": "justinholtweb\\erpysage\\connectors\\SageAccountingConnector",
+        "name": "Sage Business Cloud Accounting",
+        "vendor": "Sage",
+        "description": "Sage Accounting. Syncs products and contacts, and posts completed orders into the ledger as sales invoices — it has no sales orders or stock of its own.",
+        "capabilities": {
+            "entities": {
+                "customer": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "product": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "order": {
+                    "direction": 2,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "invoice": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                }
+            },
+            "webhooks": false,
+            "multiCompany": false,
+            "sandbox": false
+        },
+        "fields": [
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Sage application",
+                "instructions": "Register an app on the Sage developer portal and set its callback to exactly the value below.",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "copyable",
+                "name": "redirectUri",
+                "label": "Callback URL",
+                "value": "https://plugin-testing.ddev.site/erpy/oauth/callback",
+                "instructions": "",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "clientId",
+                "label": "Client ID",
+                "instructions": "",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "clientSecret",
+                "label": "Client secret",
+                "instructions": "Store this in an environment variable rather than in the database.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "select",
+                "name": "region",
+                "label": "Country",
+                "options": {
+                    "gb": "United Kingdom",
+                    "ie": "Ireland",
+                    "us": "United States",
+                    "ca": "Canada",
+                    "fr": "France",
+                    "es": "Spain",
+                    "de": "Germany"
+                },
+                "instructions": "The country of the Sage business. It picks the Sage sign-in the Connect button opens.",
+                "required": false,
+                "default": "gb",
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Posting orders",
+                "instructions": "Sage Accounting has no sales order object, so a completed Commerce order is posted as a sales invoice.",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "ledgerAccountId",
+                "label": "Sales ledger account",
+                "instructions": "The ledger account id invoice lines are posted to. Leave blank to use the product’s own.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "taxRateId",
+                "label": "Default tax rate",
+                "instructions": "Used when a line has no tax rate of its own. Sage will refuse an invoice line without one.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            }
+        ]
+    },
+    "sage-intacct": {
+        "class": "justinholtweb\\erpysage\\connectors\\SageIntacctConnector",
+        "name": "Sage Intacct",
+        "vendor": "Sage",
+        "description": "Sage Intacct through the XML gateway, with its two-part authentication and resultId paging handled for you.",
+        "capabilities": {
+            "entities": {
+                "customer": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 500,
+                    "batch": false
+                },
+                "product": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 500,
+                    "batch": false
+                },
+                "inventory": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 500,
+                    "batch": false
+                },
+                "order": {
+                    "direction": 2,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "orderStatus": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 500,
+                    "batch": false
+                },
+                "invoice": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 500,
+                    "batch": false
+                },
+                "credit": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 500,
+                    "batch": false
+                }
+            },
+            "webhooks": false,
+            "multiCompany": true,
+            "sandbox": false
+        },
+        "fields": [
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Web services sender",
+                "instructions": "Issued to the integration by Sage, not by the customer. The same sender id is used across every Intacct company you connect to.",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "senderId",
+                "label": "Sender ID",
+                "instructions": "",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "senderPassword",
+                "label": "Sender password",
+                "instructions": "Store this in an environment variable rather than in the database.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Company login",
+                "instructions": "A web services user in the customer’s Intacct company. It must be a Web Services user, not a normal one, and the sender id has to be authorised under Company → Security → Web Services Authorizations.",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "companyId",
+                "label": "Company ID",
+                "instructions": "",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "userId",
+                "label": "User ID",
+                "instructions": "",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "userPassword",
+                "label": "User password",
+                "instructions": "Store this in an environment variable rather than in the database.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "entityId",
+                "label": "Entity",
+                "instructions": "For multi-entity companies. Leave blank to work at the top level.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Objects",
+                "instructions": "Which Intacct objects to read. The defaults suit a company running Order Entry and Inventory Control; change them if yours is configured differently.",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "itemObject",
+                "label": "Items",
+                "instructions": "",
+                "required": false,
+                "default": "ITEM",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "stockObject",
+                "label": "Stock",
+                "instructions": "",
+                "required": false,
+                "default": "ITEMWAREHOUSEINFO",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "customerObject",
+                "label": "Customers",
+                "instructions": "",
+                "required": false,
+                "default": "CUSTOMER",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "orderDocumentType",
+                "label": "Sales order document type",
+                "instructions": "The Order Entry transaction definition new orders are created as. It must match exactly, including capitalisation.",
+                "required": false,
+                "default": "Sales Order",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "warehouseId",
+                "label": "Warehouse",
+                "instructions": "",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            }
+        ]
+    },
+    "sage-x3": {
+        "class": "justinholtweb\\erpysage\\connectors\\SageX3Connector",
+        "name": "Sage X3",
+        "vendor": "Sage",
+        "description": "Sage X3 through the REST web services, addressing its representations directly.",
+        "capabilities": {
+            "entities": {
+                "customer": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "product": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "inventory": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "order": {
+                    "direction": 2,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "orderStatus": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "credit": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                }
+            },
+            "webhooks": false,
+            "multiCompany": true,
+            "sandbox": false
+        },
+        "fields": [
+            {
+                "type": "url",
+                "name": "serverUrl",
+                "label": "X3 server URL",
+                "instructions": "Include the port the Syracuse web server listens on.",
+                "required": true,
+                "default": "",
+                "placeholder": "https://x3.example.com:8124",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "folder",
+                "label": "Folder",
+                "instructions": "The X3 folder. The same credentials against a different folder are a different dataset entirely.",
+                "required": true,
+                "default": "",
+                "placeholder": "SEED",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "username",
+                "label": "Username",
+                "instructions": "",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "password",
+                "label": "Password",
+                "instructions": "Store this in an environment variable rather than in the database.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Representations",
+                "instructions": "The X3 representations to read. These are the standard ones; change any that your implementation replaced with a custom representation.",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "productRepresentation",
+                "label": "Products",
+                "instructions": "",
+                "required": false,
+                "default": "ITMMASTER",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "stockRepresentation",
+                "label": "Stock",
+                "instructions": "",
+                "required": false,
+                "default": "ITMMVT",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "customerRepresentation",
+                "label": "Customers",
+                "instructions": "",
+                "required": false,
+                "default": "BPCUSTOMER",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "orderRepresentation",
+                "label": "Sales orders",
+                "instructions": "",
+                "required": false,
+                "default": "SORDER",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Behaviour",
+                "instructions": "",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "salesSite",
+                "label": "Sales site",
+                "instructions": "The X3 site orders are raised against, and the one stock is read from.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            }
+        ]
+    },
+    "sap-business-one": {
+        "class": "justinholtweb\\erpysapb1\\connectors\\SapBusinessOneConnector",
+        "name": "SAP Business One",
+        "vendor": "SAP",
+        "description": "SAP Business One through the Service Layer, with one shared session so the licence is not spent on logins.",
+        "capabilities": {
+            "entities": {
+                "customer": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "product": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "price": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "inventory": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "order": {
+                    "direction": 2,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "orderStatus": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "shipment": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "invoice": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "credit": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                }
+            },
+            "webhooks": false,
+            "multiCompany": true,
+            "sandbox": false
+        },
+        "fields": [
+            {
+                "type": "url",
+                "name": "serviceLayerUrl",
+                "label": "Service Layer URL",
+                "instructions": "Include the /b1s/v1 path. Port 50000 is the default for the Service Layer.",
+                "required": true,
+                "default": "",
+                "placeholder": "https://sap.example.com:50000/b1s/v1",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "companyDb",
+                "label": "Company database",
+                "instructions": "",
+                "required": true,
+                "default": "",
+                "placeholder": "SBODemoUS",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "username",
+                "label": "B1 user",
+                "instructions": "",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "password",
+                "label": "Password",
+                "instructions": "Store this in an environment variable rather than in the database.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Behaviour",
+                "instructions": "",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "warehouse",
+                "label": "Warehouse code",
+                "instructions": "Stock is read from this warehouse and order lines are raised against it. Leave blank for the company-wide figure.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "priceListNum",
+                "label": "Base price list number",
+                "instructions": "The list whose prices become the Commerce base price. Other B1 price lists are not synced; customer-specific prices come from Special Prices for Business Partners.",
+                "required": false,
+                "default": "1",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "seriesNumber",
+                "label": "Document series",
+                "instructions": "The numbering series new sales orders use. Leave blank for the default.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "boolean",
+                "name": "ignoreSslErrors",
+                "label": "This Service Layer uses a self-signed certificate",
+                "instructions": "Turns off certificate verification for this connection only — the login and every request. Leave off unless you know it does: it usually means an on-premise install that has never had a real certificate, and a real one is the better fix.",
+                "required": false,
+                "default": false,
+                "secret": false,
+                "suggestEnvVars": false
+            }
+        ]
+    },
+    "unit4": {
+        "class": "justinholtweb\\erpyunit4\\connectors\\Unit4Connector",
+        "name": "Unit4 ERP",
+        "vendor": "Unit4",
+        "description": "Unit4 ERPx and Business World. Every resource path is configurable, because no two Unit4 estates expose the same one.",
+        "capabilities": {
+            "entities": {
+                "customer": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "product": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "inventory": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "order": {
+                    "direction": 2,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "orderStatus": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "credit": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                }
+            },
+            "webhooks": false,
+            "multiCompany": true,
+            "sandbox": false
+        },
+        "fields": [
+            {
+                "type": "url",
+                "name": "baseUrl",
+                "label": "API base URL",
+                "instructions": "Everything up to but not including the resource name.",
+                "required": true,
+                "default": "",
+                "placeholder": "https://example.unit4cloud.com/api",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "company",
+                "label": "Company",
+                "instructions": "Sent as the companyId parameter on every request.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Authentication",
+                "instructions": "",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "select",
+                "name": "authType",
+                "label": "Scheme",
+                "options": {
+                    "oauth": "OAuth 2.0 client credentials (ERPx cloud)",
+                    "basic": "HTTP Basic (Business World on-premise)"
+                },
+                "instructions": "",
+                "required": false,
+                "default": "oauth",
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "url",
+                "name": "tokenUrl",
+                "label": "Token endpoint",
+                "instructions": "Required for OAuth. Your Unit4 Identity Services token URL.",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "scope",
+                "label": "Scope",
+                "instructions": "",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "clientId",
+                "label": "Client ID / username",
+                "instructions": "",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "clientSecret",
+                "label": "Client secret / password",
+                "instructions": "Store this in an environment variable rather than in the database.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Resources",
+                "instructions": "Unit4 estates differ. These are the ERPx conventions — change any that your deployment names differently, and correct individual field names on the mapping screen.",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "productsResource",
+                "label": "Products",
+                "instructions": "",
+                "required": false,
+                "default": "v1/products",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "stockResource",
+                "label": "Stock",
+                "instructions": "",
+                "required": false,
+                "default": "v1/inventory/balances",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "customersResource",
+                "label": "Customers",
+                "instructions": "",
+                "required": false,
+                "default": "v1/customers",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "ordersResource",
+                "label": "Sales orders",
+                "instructions": "",
+                "required": false,
+                "default": "v1/salesorders",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "modifiedSinceParam",
+                "label": "Changed-since parameter",
+                "instructions": "The query parameter your estate filters on for records changed since a moment, sent with a UTC timestamp on every delta sync. Ask your implementation partner what yours is called. Leave blank if there is none: every sync then reads everything, which is slower but misses nothing.",
+                "required": false,
+                "default": "lastChangedFrom",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "probeResource",
+                "label": "Resource to test with",
+                "instructions": "Used by the Test button. Any resource this user can read.",
+                "required": false,
+                "default": "v1/products",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            }
+        ]
+    },
+    "visma-net": {
+        "class": "justinholtweb\\erpyvisma\\connectors\\VismaNetConnector",
+        "name": "Visma.net ERP",
+        "vendor": "Visma",
+        "description": "Visma.net ERP (Financials) through the integration API, authenticated with Visma Connect.",
+        "capabilities": {
+            "entities": {
+                "customer": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "product": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "inventory": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 500,
+                    "batch": false
+                },
+                "order": {
+                    "direction": 2,
+                    "delta": false,
+                    "pageSize": 100,
+                    "batch": false
+                },
+                "orderStatus": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "shipment": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "invoice": {
+                    "direction": 1,
+                    "delta": true,
+                    "pageSize": 200,
+                    "batch": false
+                },
+                "credit": {
+                    "direction": 1,
+                    "delta": false,
+                    "pageSize": 50,
+                    "batch": false
+                }
+            },
+            "webhooks": false,
+            "multiCompany": true,
+            "sandbox": false
+        },
+        "fields": [
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Visma Connect",
+                "instructions": "Register an integration in Visma Developer Portal and grant it the Visma.net ERP scope for the customer’s tenant.",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "clientId",
+                "label": "Client ID",
+                "instructions": "",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "clientSecret",
+                "label": "Client secret",
+                "instructions": "Store this in an environment variable rather than in the database.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": true,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "scope",
+                "label": "Scope",
+                "instructions": "The scopes granted to your integration. Read-only installations can drop the create scope.",
+                "required": false,
+                "default": "vismanet_erp_service_api:read vismanet_erp_service_api:create",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "heading",
+                "name": "",
+                "label": "Company",
+                "instructions": "",
+                "required": false,
+                "secret": false,
+                "suggestEnvVars": false
+            },
+            {
+                "type": "text",
+                "name": "companyId",
+                "label": "Company ID",
+                "instructions": "Sent as the ipp-company-id header. A wrong one returns an empty, entirely successful response rather than an error.",
+                "required": true,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "warehouse",
+                "label": "Warehouse",
+                "instructions": "",
+                "required": false,
+                "default": "",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "text",
+                "name": "orderType",
+                "label": "Sales order type",
+                "instructions": "",
+                "required": false,
+                "default": "SO",
+                "placeholder": "",
+                "secret": false,
+                "suggestEnvVars": true
+            },
+            {
+                "type": "boolean",
+                "name": "holdNewOrders",
+                "label": "Create orders on hold",
+                "instructions": "",
+                "required": false,
+                "default": true,
+                "secret": false,
+                "suggestEnvVars": false
+            }
+        ]
+    }
+}

@@ -116,8 +116,8 @@ No local PHP on this Mac. Everything runs inside the plugin-testing container:
 
 ```sh
 cd ~/Sites/plugin-testing
-ddev exec php /var/www/craft-erpy/tests/integration/checks.php      # 127 engine checks
-ddev exec php /var/www/craft-erpy/tests/integration/connectors.php  # 272 conformance checks
+ddev exec php /var/www/craft-erpy/tests/integration/checks.php      # 141 engine checks
+ddev exec php /var/www/craft-erpy/tests/integration/connectors.php  # 306 conformance checks
 ddev exec bash -c 'find /var/www/craft-erpy/src -name "*.php" -print0 | xargs -0 -n1 php -l'
 ```
 
@@ -129,9 +129,13 @@ the same checks against a recorded transport. It proves the request a connector 
 contract it honours; it cannot prove a vendor's field is spelled the way the connector expects.
 Only a live tenant can do that, which is what the mapping overlay is for. What it does catch is
 the class of bug that ships: a connector advertising a flow it never implemented (it found eight),
-a delta sync sending no filter, paging that repeats a cursor, credentials that never reach the
-request, a refusal marked retryable so the queue hammers the ERP, and a credential echoed back to
-the merchant.
+a delta sync sending no filter on *any* entity declared delta (and a non-delta entity that filters
+anyway), paging that repeats a cursor, credentials that never reach the request, a refusal marked
+retryable so the queue hammers the ERP, a credential echoed back to the merchant, and a
+duplicate-order lookup that trusts the first row it gets back. That last one found ten: an ERP
+that ignores the lookup's filter would otherwise make every order after the first "already
+delivered" and never create it. A lookup must compare the returned reference exactly, using the
+same helper that produced the value it wrote.
 
 **Harness note:** `craft-penny` breaks every element save and `craft-lyfe` breaks
 `markAsComplete()` in this shared harness. Both are detached in-process by `checks.php`; neither

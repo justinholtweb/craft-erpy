@@ -180,7 +180,13 @@ class SyncController extends Controller
 
                 $this->stdout('  ' . str_pad(Entity::displayName($entity), 16));
                 $this->stdout(str_pad($last ? $last->status : 'never run', 12), $last?->status === Run::STATUS_SUCCESS ? Console::FG_GREEN : Console::FG_YELLOW);
-                $this->stdout('since ' . ($watermark ? $watermark->format('Y-m-d H:i') . ' UTC' : 'the beginning') . "\n", Console::FG_GREY);
+                // An entity without delta support is read in full every run, whatever the
+                // cursor says, so printing its watermark would imply a filter that is never sent.
+                if ($connector && !$connector::capabilities()->supportsDelta($entity)) {
+                    $this->stdout("full read every run\n", Console::FG_GREY);
+                } else {
+                    $this->stdout('since ' . ($watermark ? $watermark->format('Y-m-d H:i') . ' UTC' : 'the beginning') . "\n", Console::FG_GREY);
+                }
             }
 
             $problems = $plugin->getDeadLetters()->openCount($connection);

@@ -1,0 +1,16 @@
+<!doctype html><html><body><pre id="out"></pre>
+<script src="marks.js"></script>
+<script>
+const ns = 'http://www.w3.org/2000/svg', out = {};
+const svg = document.createElementNS(ns, 'svg');
+svg.setAttribute('width', 2000); svg.setAttribute('height', 2000);
+document.body.appendChild(svg);
+for (const [vendor, paths] of Object.entries(MARKS)) {
+  const g = document.createElementNS(ns, 'g');
+  for (const [d] of paths) { const p = document.createElementNS(ns, 'path'); p.setAttribute('d', d); g.appendChild(p); }
+  svg.appendChild(g);
+  const b = g.getBBox();
+  out[vendor] = [b.x, b.y, b.width, b.height];
+}
+document.getElementById('out').textContent = JSON.stringify(out);
+</script></body></html>

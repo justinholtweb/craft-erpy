@@ -219,6 +219,11 @@ Event::on(Push::class, Push::EVENT_BEFORE_PUSH, function(BuildDocumentEvent $e) 
 });
 ```
 
+## Documentation
+
+Full documentation, including a page for every add-on, is at
+https://justinholt.com/plugins/craft-erpy/docs.
+
 ## Requirements
 
 Craft CMS 5.3+, Craft Commerce 5.0+, PHP 8.2+.
@@ -226,3 +231,8 @@ Craft CMS 5.3+, Craft Commerce 5.0+, PHP 8.2+.
 ## Support
 
 justin@justinholt.com
+
+## License
+
+The Craft License. See `LICENSE.md`. Erpy is a single paid edition — $149, then $129 a year — and
+every connector add-on is free.

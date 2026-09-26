@@ -56,10 +56,10 @@ architectural.
 - Gateway: 8 tables, 14 services, 6 web controllers, 3 console controllers, 3 queue jobs,
   10 CP templates, a Twig variable, a built-in Mock ERP.
 - 16 connectors across 12 free packages.
-- **127 engine checks** against the Mock ERP: paging, delta watermarks, identity map, mapping,
+- **141 engine checks** against the Mock ERP: paging, delta watermarks, identity map, mapping,
   contract-pricing precedence, dry runs, dead letters, replay, partial fulfilment, redaction,
   cascade deletion.
-- **272 conformance checks** across all 17 connectors.
+- **306 conformance checks** across all 17 connectors.
 - CP screens smoke-tested with a real session — connections list, editor, all six mapping screens,
   activity, problems, log, settings — plus the test and sync AJAX actions.
 

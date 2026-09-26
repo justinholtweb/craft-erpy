@@ -340,9 +340,7 @@ class Catalog extends Component
             return ApplyResult::failed(Craft::t('erpy', 'A price line arrived with no SKU.'), false);
         }
 
-        $isBasePrice = $document->customerCode === null
-            && $document->customerGroupCode === null
-            && ($document->priceListCode === null || $document->priceListCode === $map->option('basePriceListCode'));
+        $isBasePrice = $this->isVariantBasePrice($document, $map);
 
         if ($dryRun) {
             return ApplyResult::skipped($isBasePrice
@@ -355,6 +353,30 @@ class Catalog extends Component
         }
 
         return $this->storeContractPrice($connection, $document);
+    }
+
+    /**
+     * Whether a price line is *the* catalogue price, and so belongs on the variant.
+     *
+     * Being for everybody is not enough. A base-audience line with a minimum quantity above one
+     * is a quantity break, and writing it to the variant would hand the "buy 50" price to a
+     * customer buying one. A line with an end date, or one that has not started, is a
+     * promotion: written to the variant it would outlive its window, because a delta sync never
+     * re-sends the unchanged regular price that should replace it. Both stay in `erpy_prices`,
+     * where Pricing resolves them at cart time — breaks by quantity, promotions by date.
+     */
+    private function isVariantBasePrice(ErpPrice $document, FieldMap $map): bool
+    {
+        $forEverybody = $document->customerCode === null
+            && $document->customerGroupCode === null
+            && ($document->priceListCode === null || $document->priceListCode === $map->option('basePriceListCode'));
+
+        if (!$forEverybody || $document->minQuantity > 1) {
+            return false;
+        }
+
+        return $document->endsAt === null
+            && ($document->startsAt === null || $document->startsAt <= new DateTime());
     }
 
     private function applyBasePrice(Connection $connection, ErpPrice $document): ApplyResult

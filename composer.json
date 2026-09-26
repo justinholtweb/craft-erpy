@@ -15,6 +15,7 @@
         "middleware"
     ],
     "license": "proprietary",
+    "homepage": "https://justinholt.com/plugins/craft-erpy",
     "authors": [
         {
             "name": "Justin Holt",
@@ -22,7 +23,10 @@
         }
     ],
     "support": {
-        "email": "justin@justinholt.com"
+        "email": "justin@justinholt.com",
+        "docs": "https://justinholt.com/plugins/craft-erpy/docs",
+        "source": "https://github.com/justinholtweb/craft-erpy",
+        "issues": "https://github.com/justinholtweb/craft-erpy/issues"
     },
     "minimum-stability": "stable",
     "prefer-stable": true,
@@ -48,7 +52,7 @@
         "handle": "erpy",
         "developer": "Justin Holt",
         "developerUrl": "https://justinholt.com",
-        "documentationUrl": "https://github.com/justinholtweb/craft-erpy/blob/main/README.md",
+        "documentationUrl": "https://justinholt.com/plugins/craft-erpy/docs",
         "changelogUrl": "https://raw.githubusercontent.com/justinholtweb/craft-erpy/main/CHANGELOG.md",
         "class": "justinholtweb\\erpy\\Plugin"
     }

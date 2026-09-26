@@ -3,6 +3,7 @@
 namespace justinholtweb\erpy\base;
 
 use Craft;
+use justinholtweb\erpy\auth\OAuth2AuthorizationCode;
 use justinholtweb\erpy\models\Connection;
 use justinholtweb\erpy\Plugin;
 use Throwable;
@@ -130,7 +131,17 @@ abstract class Connector implements ConnectorInterface
     {
         $startedAt = microtime(true);
 
-        if (!$this->auth()?->isConfigured() && static::settingsFields() !== []) {
+        $auth = $this->auth();
+
+        // An authorization-code connector with its app registration saved but no consent yet is
+        // not "incomplete" — the merchant has filled in every field there is. What it is missing
+        // is the Connect button, and saying "fill in every required field" sends them hunting
+        // for a field that does not exist.
+        $awaitingConsent = $auth instanceof OAuth2AuthorizationCode
+            && $auth->hasClientCredentials()
+            && !$auth->isAuthorized();
+
+        if (!$awaitingConsent && !$auth?->isConfigured() && static::settingsFields() !== []) {
             return HealthResult::fail(
                 Craft::t('erpy', 'Credentials are incomplete.'),
                 [Craft::t('erpy', 'Fill in every required field above, then save before testing.')],
@@ -138,10 +149,20 @@ abstract class Connector implements ConnectorInterface
         }
 
         try {
+            // The connector's own probe gets to say it in its own words ("approve access in Exact
+            // once"); the generic sentence is only for one that did not notice.
             $result = $this->probe();
         } catch (Throwable $e) {
-            return HealthResult::fail($e->getMessage());
+            $result = HealthResult::fail($e->getMessage());
         }
+
+        if ($awaitingConsent && $result->ok) {
+            $result = HealthResult::fail(
+                Craft::t('erpy', 'Not connected yet.'),
+                [Craft::t('erpy', 'Use the Connect button to approve access in {erp} once.', ['erp' => static::displayName()])],
+            );
+        }
+
 
         $result->durationMs = (int)round((microtime(true) - $startedAt) * 1000);
         $result->message = $this->redactSecrets($result->message);

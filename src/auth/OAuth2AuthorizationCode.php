@@ -43,9 +43,44 @@ class OAuth2AuthorizationCode extends BaseAuth
 
     public function isConfigured(): bool
     {
+        return $this->hasClientCredentials() && $this->token('refreshToken') !== null;
+    }
+
+    /**
+     * Whether the app registration is saved — the point at which the merchant can be sent to
+     * the consent screen. Consent without a client id is a vendor error page, not a connection.
+     */
+    public function hasClientCredentials(): bool
+    {
         return (string)$this->setting($this->clientIdField) !== ''
-            && (string)$this->setting($this->clientSecretField) !== ''
-            && $this->token('refreshToken') !== null;
+            && (string)$this->setting($this->clientSecretField) !== '';
+    }
+
+    /**
+     * What the connection screen can honestly say about the consent, as a plain array for Twig.
+     *
+     * `accessExpiresAt` is only known while an access token is cached; `refreshExpiresAt` only
+     * for the providers that say (Sage does, Exact does not). Neither is guessed.
+     *
+     * @return array{authorized:bool,hasClientCredentials:bool,authorizedAt:?\DateTime,accessExpiresAt:?\DateTime,refreshExpiresAt:?\DateTime}
+     */
+    public function describe(): array
+    {
+        $at = static function(mixed $timestamp): ?\DateTime {
+            return is_numeric($timestamp) && (int)$timestamp > 0
+                ? (new \DateTime('@' . (int)$timestamp))->setTimezone(new \DateTimeZone(Craft::$app->getTimeZone()))
+                : null;
+        };
+
+        $authorized = $this->isAuthorized();
+
+        return [
+            'authorized' => $authorized,
+            'hasClientCredentials' => $this->hasClientCredentials(),
+            'authorizedAt' => $authorized ? $at($this->connection->tokens['obtainedAt'] ?? null) : null,
+            'accessExpiresAt' => $authorized && $this->cacheGet('access') !== null ? $at($this->cacheGet('accessExpiresAt')) : null,
+            'refreshExpiresAt' => $authorized ? $at($this->connection->tokens['refreshExpiresAt'] ?? null) : null,
+        ];
     }
 
     /** Whether the merchant has completed the consent step at least once. */
@@ -126,7 +161,8 @@ class OAuth2AuthorizationCode extends BaseAuth
     public function revoke(): void
     {
         $this->cacheForget('access');
-        $this->storeTokens(['refreshToken' => null, 'obtainedAt' => null]);
+        $this->cacheForget('accessExpiresAt');
+        $this->storeTokens(['refreshToken' => null, 'obtainedAt' => null, 'refreshExpiresAt' => null]);
     }
 
     private function grant(array $params): bool
@@ -151,16 +187,21 @@ class OAuth2AuthorizationCode extends BaseAuth
             return false;
         }
 
-        $this->cacheSet('access', $accessToken, max(30, (int)$response->at('expires_in', 3600) - self::EXPIRY_SLACK));
+        $ttl = max(30, (int)$response->at('expires_in', 3600) - self::EXPIRY_SLACK);
+        $this->cacheSet('access', $accessToken, $ttl);
+        $this->cacheSet('accessExpiresAt', time() + $ttl, $ttl);
 
         // Rotating providers hand back a fresh refresh token and kill the old one. A provider
         // that does not rotate simply omits it, and the stored one stays good.
         $refreshToken = $response->at('refresh_token');
 
         if (is_string($refreshToken) && $refreshToken !== '') {
+            $refreshTtl = (int)$response->at('refresh_token_expires_in', 0);
+
             $this->storeTokens([
                 'refreshToken' => $refreshToken,
                 'obtainedAt' => time(),
+                'refreshExpiresAt' => $refreshTtl > 0 ? time() + $refreshTtl : null,
             ]);
         }
 

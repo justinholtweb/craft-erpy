@@ -9,6 +9,8 @@ use craft\db\Query;
 use craft\elements\User;
 use craft\helpers\Db;
 use DateTime;
+use justinholtweb\erpy\base\Direction;
+use justinholtweb\erpy\base\Entity;
 use justinholtweb\erpy\db\Table;
 use justinholtweb\erpy\models\Account;
 use justinholtweb\erpy\models\Connection;
@@ -28,9 +30,17 @@ use justinholtweb\erpy\Plugin;
  */
 class Pricing extends Component
 {
-    private const SPECIFICITY_CUSTOMER = 3;
-    private const SPECIFICITY_GROUP = 2;
-    private const SPECIFICITY_LIST = 1;
+    private const SPECIFICITY_CUSTOMER = 4;
+    private const SPECIFICITY_GROUP = 3;
+    private const SPECIFICITY_LIST = 2;
+
+    /**
+     * A line for everybody. The plain catalogue price is written onto the variant, so the rows
+     * that reach here are the base-audience lines Catalog deliberately kept off it — quantity
+     * breaks and dated promotions — and they rank below every negotiated audience. Ranking them
+     * level with a price list let a base "buy 10" break beat a customer's own list price.
+     */
+    private const SPECIFICITY_BASE = 1;
 
     /** @var array<string,array|null> */
     private array $memo = [];
@@ -83,11 +93,17 @@ class Pricing extends Component
 
             // Only the winning audience's breaks are shown. Mixing a customer's negotiated tiers
             // with their price list's would advertise a quantity break that will not be honoured.
-            $topSpecificity = max(array_map(fn(array $row) => $this->specificity($row, $account), $rows));
+            $topSpecificity = max(array_map(fn(array $row) => $this->specificity($row, $account, $candidate), $rows));
+
+            // Every row is for somebody else: showing them would publish another customer's
+            // negotiated price.
+            if ($topSpecificity === 0) {
+                continue;
+            }
             $breaks = [];
 
             foreach ($rows as $row) {
-                if ($this->specificity($row, $account) !== $topSpecificity) {
+                if ($this->specificity($row, $account, $candidate) !== $topSpecificity) {
                     continue;
                 }
 
@@ -121,7 +137,7 @@ class Pricing extends Component
                 continue;
             }
 
-            $specificity = $this->specificity($row, $account);
+            $specificity = $this->specificity($row, $account, $connection);
 
             if ($specificity === 0) {
                 continue;
@@ -147,7 +163,7 @@ class Pricing extends Component
      * Which audience a row is for, from this account's point of view. Zero means the row is for
      * somebody else and must be ignored.
      */
-    private function specificity(array $row, ?Account $account): int
+    private function specificity(array $row, ?Account $account, Connection $connection): int
     {
         if (!empty($row['customerCode'])) {
             return $account && $row['customerCode'] === $account->customerCode ? self::SPECIFICITY_CUSTOMER : 0;
@@ -157,13 +173,20 @@ class Pricing extends Component
             return $account && $row['customerGroupCode'] === $account->customerGroupCode ? self::SPECIFICITY_GROUP : 0;
         }
 
-        if (!empty($row['priceListCode'])) {
+        // The merchant's base price list is everybody's list, exactly as Catalog treats it when
+        // deciding what goes onto the variant.
+        if (!empty($row['priceListCode']) && $row['priceListCode'] !== $this->basePriceListCode($connection)) {
             return $account && $row['priceListCode'] === $account->priceListCode ? self::SPECIFICITY_LIST : 0;
         }
 
-        // A row with no audience at all is a base price; it is written onto the variant instead,
-        // so reaching here means the merchant switched that off and wants it resolved live.
-        return self::SPECIFICITY_LIST;
+        return self::SPECIFICITY_BASE;
+    }
+
+    private function basePriceListCode(Connection $connection): ?string
+    {
+        $code = Plugin::getInstance()->getMapping()->get($connection, Entity::PRICE, Direction::PULL)->option('basePriceListCode');
+
+        return is_string($code) && $code !== '' ? $code : null;
     }
 
     /**

@@ -41,6 +41,9 @@ class MockConnector extends Connector
     /** @var array<string,string> naturalKey => remote id, so a repeat push is detected */
     private static array $known = [];
 
+    /** @var array<string,FetchCriteria> entity => the criteria the engine last asked with */
+    private static array $asked = [];
+
     public static function handle(): string
     {
         return 'mock';
@@ -111,6 +114,13 @@ class MockConnector extends Connector
     // ---------------------------------------------------------------------------------------
     // Pull
     // ---------------------------------------------------------------------------------------
+
+    public function fetchPage(string $entity, FetchCriteria $criteria): Page
+    {
+        self::$asked[$entity] = $criteria;
+
+        return parent::fetchPage($entity, $criteria);
+    }
 
     protected function fetchProducts(FetchCriteria $criteria): Page
     {
@@ -335,7 +345,7 @@ class MockConnector extends Connector
         $failEvery = (int)$this->setting('failEvery', 0);
 
         if ($failEvery > 0 && (count(self::$received[$entity] ?? []) + 1) % $failEvery === 0) {
-            return PushResult::rejected(Craft::t('erpy', 'The mock ERP was told to reject every {n}th document.', ['n' => $failEvery]));
+            return PushResult::rejected(Craft::t('erpy', 'The mock ERP was told to reject 1 in every {n} documents.', ['n' => $failEvery]));
         }
 
         self::$received[$entity][] = $document;
@@ -403,9 +413,19 @@ class MockConnector extends Connector
         return self::$received[$entity] ?? [];
     }
 
+    /**
+     * The criteria the engine last fetched an entity with — how a test proves what the engine
+     * asked for, rather than inferring it from what came back.
+     */
+    public static function lastCriteria(string $entity): ?FetchCriteria
+    {
+        return self::$asked[$entity] ?? null;
+    }
+
     public static function forget(): void
     {
         self::$received = [];
         self::$known = [];
+        self::$asked = [];
     }
 }
