@@ -82,11 +82,11 @@ Worth keeping, because they are the ones that would otherwise have shipped:
 
 - GitHub repos and tags for thirteen packages; Packagist; Plugin Store submissions.
 - Verification against real tenants, per connector.
-- The file / URL exchange connector — 5.1.0, below.
+- The file / URL exchange connector — 5.2.0, below.
 
-## 5.1.0 — the file / URL exchange connector (GitHub #3)
+## 5.2.0 — the file / URL exchange connector (GitHub #3)
 
-Decided 2026-09-26: ship 5.0.0 as it is, build this for 5.1.0, and **require**
+Decided 2026-09-26: build this after the 5.1.0 fix release, as 5.2.0, and **require**
 `phpseclib/phpseclib` ^3 for SFTP rather than making it optional.
 
 Requested by a team moving several south-east European stores onto Erpy. Their ERPs (Pantheon,
