@@ -155,6 +155,13 @@ class Catalog extends Component
         $variants = $this->buildVariants($product, $document, $map, $changes, $isNew);
         $product->setVariants($variants);
 
+        // Commerce 5's setVariants() does not mark the attribute dirty, and the product's nested
+        // element manager only saves variants when it is dirty, when propagation requires it, or
+        // when the product lands on a new site. A multi-site install gets the last one for free,
+        // which hides this; a single-site install saves the product and silently drops every
+        // variant, and the next stock pull skips every line. (GitHub #1.)
+        $product->setDirtyAttributes(['variants'], false);
+
         foreach (Plugin::getInstance()->getMapping()->apply($map, $document, ['connection' => $connection]) as $handle => $value) {
             $this->setMappedValue($product, $handle, $value, $changes);
         }

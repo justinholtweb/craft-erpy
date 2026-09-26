@@ -141,7 +141,17 @@ abstract class Connector implements ConnectorInterface
             && $auth->hasClientCredentials()
             && !$auth->isAuthorized();
 
-        if (!$awaitingConsent && !$auth?->isConfigured() && static::settingsFields() !== []) {
+        // Incomplete means an auth that is not configured, or a required field left blank. A
+        // connector with settings but no auth at all (the Mock, a file-based one) has nothing to
+        // be "incomplete" about beyond its required fields — `!$auth?->isConfigured()` read a
+        // missing auth as an unconfigured one and failed every test (GitHub #2).
+        $authIncomplete = $auth !== null && !$awaitingConsent && !$auth->isConfigured();
+        $missing = array_filter(
+            Field::requiredNames(static::settingsFields()),
+            fn(string $name) => in_array($this->setting($name), [null, ''], true),
+        );
+
+        if ($authIncomplete || $missing !== []) {
             return HealthResult::fail(
                 Craft::t('erpy', 'Credentials are incomplete.'),
                 [Craft::t('erpy', 'Fill in every required field above, then save before testing.')],

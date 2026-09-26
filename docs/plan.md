@@ -81,7 +81,52 @@ Worth keeping, because they are the ones that would otherwise have shipped:
 ## Still to do
 
 - GitHub repos and tags for thirteen packages; Packagist; Plugin Store submissions.
-- Marketing site (see `[[project_craft_plugin_websites]]`), registry entry in
-  `[[project_craft_plugin_registry]]`.
 - Verification against real tenants, per connector.
-- A generic REST/CSV connector for the ERPs with no add-on, deferred deliberately.
+- The file / URL exchange connector — 5.1.0, below.
+
+## 5.1.0 — the file / URL exchange connector (GitHub #3)
+
+Decided 2026-09-26: ship 5.0.0 as it is, build this for 5.1.0, and **require**
+`phpseclib/phpseclib` ^3 for SFTP rather than making it optional.
+
+Requested by a team moving several south-east European stores onto Erpy. Their ERPs (Pantheon,
+Synesis, Minimax, 4D, Luceed) are file-first, and the pattern is the same everywhere: the ERP exports
+stock and prices as CSV or XML, and it imports orders by polling an XML URL the shop exposes,
+filtered by date, with a token, often in Windows-1250. The value is not the transport but that the
+identity map, cursors, dead letters and mapping overlay apply to files exactly as they do to NetSuite.
+It also gives every merchant without a "real" ERP a first step onto Erpy.
+
+It ships **inside Erpy**, like the Mock connector, not as an add-on: it is the generic piece, and
+the requester intends to write local-API connectors as free add-ons on top of the gateway.
+
+**Inbound (ERP → Commerce):** products, prices, inventory, customers from CSV or XML.
+- Sources: a URL (with optional basic/bearer auth), an SFTP path, a local path, or a CP upload.
+- CSV: delimiter, enclosure, header row on/off; XML: a record path (a small XPath subset, e.g.
+  `/Export/Items/Item`). Encodings: UTF-8, Windows-1250, ISO-8859-2 (plus anything `mb_convert_encoding`
+  knows), converted before parsing.
+- Columns/elements map to canonical fields on the existing mapping screen. Every file field arrives
+  in `raw.`, so the overlay is the whole mapping story: the connector only needs a default column
+  guess per canonical field and lets canonical rules correct it.
+- Delta: by the file's modification time (skip an unchanged file — cheapest and most common), or by
+  a date column compared with the watermark. Paging is by row offset within the file, streamed, so a
+  100k-line stock file does not have to fit in memory.
+
+**Outbound (Commerce → ERP), two modes:**
+- *Write*: each completed order (or a batch per run) as XML or CSV to SFTP or a local path, from the
+  canonical `ErpOrder` as-is or through a Twig template. Written atomically (temp name, then rename),
+  because ERPs poll directories and will read half a file.
+- *Serve*: `erpy/export/<connection>/orders?from=…&to=…&token=…` returns canonical orders as XML or
+  CSV in a chosen encoding. Constant-time token compare, token rotatable in the CP, never in project
+  config (connections are in the database, which is the point). Serving an order records it in the
+  identity map the way a push does, so a poll does not export it twice unless `?all=1` or a date
+  range explicitly asks; the order push queue treats a served connection as "pull-delivered" and
+  does not also try to push.
+
+**Coming back:** order status and shipments as a file (order number, status, tracking) through the
+same inbound machinery — cheap once inbound exists, and it closes the loop.
+
+**What the engine needs:** a transport abstraction for non-HTTP sources (the connector should not
+fake HTTP), a public front-end route for *serve* alongside the webhook one, and conformance checks
+that drive the file connector against fixture files in each encoding and both formats, including a
+malformed row (dead letter, not a failed run) and a mid-file encoding error.
+

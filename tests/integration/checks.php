@@ -1042,6 +1042,27 @@ try {
             ?: json_encode($connection->getErrors());
     });
 
+    check('testing a connector with settings but no auth does not report incomplete credentials (GitHub #2)', function() use ($connection) {
+        $result = $connection->getConnector()->test();
+
+        return ($result->ok && !str_contains($result->message, 'incomplete'))
+            ?: "test said: {$result->message}";
+    });
+
+    check('a connector with no auth still reports a blank required field as incomplete', function() {
+        $connector = new class extends MockConnector {
+            public static function settingsFields(): array
+            {
+                return [\justinholtweb\erpy\base\Field::text('path', 'Path', ['required' => true])];
+            }
+        };
+        $connector->setConnection(new Connection(['name' => 'x', 'handle' => 'x', 'connector' => 'mock', 'settings' => []]));
+        $result = $connector->test();
+
+        return (!$result->ok && str_contains($result->message, 'incomplete'))
+            ?: "test said: {$result->message}";
+    });
+
     check('it comes back by handle', function() use ($plugin, $connection) {
         return $plugin->getConnections()->getByHandle($connection->handle)?->id === $connection->id;
     });
@@ -1241,6 +1262,19 @@ try {
             ?: "created {$run->created}, failed {$run->failed}, variants $count, message {$run->message}";
     });
 
+    check('a pulled product marks its variants dirty, so a single-site install saves them (GitHub #1)', function() use ($connection, $productType, $suffix) {
+        // Commerce's setVariants() leaves the attribute clean, and the nested element manager
+        // only saves variants when it is dirty or when the product lands on a new site. This
+        // harness has several sites, so the pull above persists them either way; on a
+        // single-site install it would not. Assert the flag itself, which site count can't hide.
+        $populate = new ReflectionMethod(\justinholtweb\erpy\services\Catalog::class, 'populateProduct');
+        $populate->setAccessible(true);
+        $document = new ErpProduct(['sku' => "ERPY$suffix-DIRTY", 'name' => 'Dirty check', 'price' => 1.0]);
+        $changes = $populate->invoke(Plugin::getInstance()->getCatalog(), $connection, null, $document, new FieldMap(['options' => []]), $productType->id, true);
+
+        return $changes['product']->isAttributeDirty('variants') ?: 'the variants attribute is clean';
+    });
+
     check('the ERP’s blocked flag disables the Commerce product', function() use ($suffix) {
         // The mock blocks every 23rd item and disables every 11th; with eight items neither
         // fires, so this asserts the rule rather than the sample.
@@ -1358,7 +1392,20 @@ try {
     check('inventory pulls and sets stock', function() use ($plugin, $connection) {
         $run = $plugin->getSync()->run($connection, Entity::INVENTORY, ['full' => true, 'force' => true]);
 
-        return $run->failed === 0 ?: "failed {$run->failed}: {$run->message}";
+        if ($run->failed !== 0) {
+            return "failed {$run->failed}: {$run->message}";
+        }
+
+        // A stock line for a product whose variant was never saved is skipped, not failed, so
+        // "nothing failed" passed while every line was dropped (GitHub #1). Look for it directly.
+        $missing = (new craft\db\Query())
+            ->from(Table::RUN_ITEMS)
+            ->where(['runId' => $run->id])
+            ->andWhere(['like', 'message', 'No variant with the SKU'])
+            ->count();
+
+        return ((int)$missing === 0 && $run->updated + $run->skipped > 0)
+            ?: "$missing stock lines had no variant to land on";
     });
 
     check('the stock buffer is subtracted before Commerce sees the number', function() use ($plugin, $connection, $suffix) {
