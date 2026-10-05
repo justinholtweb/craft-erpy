@@ -60,7 +60,7 @@ class SyncJob extends BaseJob
 
         return Craft::t('erpy', 'Syncing {entity} from {name}', [
             'entity' => strtolower(Entity::displayName($this->entity)),
-            'name' => $connection?->name ?? 'the ERP',
+            'name' => $connection->name ?? 'the ERP',
         ]);
     }
 

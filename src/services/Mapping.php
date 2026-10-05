@@ -9,7 +9,6 @@ use craft\helpers\Db;
 use craft\helpers\StringHelper;
 use DateTime;
 use DateTimeInterface;
-use justinholtweb\erpy\base\Direction;
 use justinholtweb\erpy\db\Table;
 use justinholtweb\erpy\models\canonical\ErpDocument;
 use justinholtweb\erpy\models\Connection;

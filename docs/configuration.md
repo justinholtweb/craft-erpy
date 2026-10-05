@@ -18,10 +18,10 @@ to.
 | | |
 |---|---|
 | **Name and handle** | The handle is what console commands take: `php craft erpy/sync/run acme` |
-| **Connector** | Which ERP. Changing it on a live connection is not a thing you want to do |
+| **Connector** | Which ERP. Only an admin can change it on a saved connection |
 | **Enabled** | A disabled connection never syncs, scheduled or otherwise |
 | **Store** | Which Commerce store this connection feeds, on a multi-store site |
-| **Credentials** | Whatever this connector declares — a URL, a key, a tenant, an OAuth flow |
+| **Credentials** | Whatever this connector declares — a URL, a key, a tenant, an OAuth flow. Literal secrets and OAuth tokens are encrypted at rest; `$ENV` references are stored as written |
 
 ### What it syncs
 
@@ -37,6 +37,13 @@ promise honest.
 **Intervals are per entity on purpose.** Inventory usually wants fifteen minutes and the product
 catalogue usually wants overnight. One interval for the whole connection means either hammering
 the ERP for a catalogue that changes twice a week, or letting stock go stale.
+
+### Changing where a connection points
+
+Only an admin can change a saved connection's connector or any of its endpoint URLs. When one
+changes, the stored secrets and OAuth tokens are dropped — they were issued for the old host — so
+enter them again in the same save, or reconnect. Leaving a secret blank on any other save keeps
+the stored one.
 
 ### Test connection
 

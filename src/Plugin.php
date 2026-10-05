@@ -63,7 +63,7 @@ class Plugin extends BasePlugin
 {
     public const HANDLE = 'erpy';
 
-    public string $schemaVersion = '5.0.0';
+    public string $schemaVersion = '5.1.1';
 
     public bool $hasCpSettings = true;
 

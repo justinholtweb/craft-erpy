@@ -12,6 +12,7 @@ use justinholtweb\erpy\base\ConnectorInterface;
 use justinholtweb\erpy\base\Direction;
 use justinholtweb\erpy\base\Entity;
 use justinholtweb\erpy\base\Field;
+use justinholtweb\erpy\helpers\Secret;
 use justinholtweb\erpy\Plugin;
 use justinholtweb\erpy\records\ConnectionRecord;
 
@@ -61,10 +62,15 @@ class Connection extends Model
     public function __construct($config = [])
     {
         // Records hand these back as JSON strings; the CP hands them back as arrays.
-        foreach (['settings', 'sync', 'tokens'] as $key) {
+        foreach (['settings', 'sync'] as $key) {
             if (isset($config[$key]) && is_string($config[$key])) {
                 $config[$key] = json_decode($config[$key], true) ?: [];
             }
+        }
+
+        // Encrypted since 5.1.1; a row written before then is plain JSON and still reads.
+        if (isset($config['tokens']) && is_string($config['tokens'])) {
+            $config['tokens'] = Secret::decodeTokens($config['tokens']);
         }
 
         parent::__construct($config);
@@ -151,6 +157,11 @@ class Connection extends Model
     public function getSetting(string $name, mixed $default = null): mixed
     {
         $value = $this->settings[$name] ?? $default;
+
+        // A literal secret is stored encrypted (5.1.1); an `$ENV` reference is not, and resolves.
+        if (Secret::isEncrypted($value)) {
+            return Secret::decrypt($value) ?? '';
+        }
 
         if (is_string($value) && $value !== '') {
             return Craft::parseEnv($value);

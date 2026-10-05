@@ -39,9 +39,13 @@ abstract class Field
         ], $config));
     }
 
+    /**
+     * Where the connection sends its requests — and so its credentials. An endpoint, which only an
+     * admin may set or change, and changing it drops the stored secrets.
+     */
     public static function url(string $name, string $label, array $config = []): array
     {
-        return self::text($name, $label, array_merge(['type' => 'url'], $config));
+        return self::text($name, $label, array_merge(['type' => 'url', 'endpoint' => true], $config));
     }
 
     public static function select(string $name, string $label, array $options, array $config = []): array
@@ -134,6 +138,25 @@ abstract class Field
 
         foreach ($fields as $field) {
             if (($field['secret'] ?? false) && ($field['name'] ?? '') !== '') {
+                $names[] = $field['name'];
+            }
+        }
+
+        return $names;
+    }
+
+    /**
+     * Every field that decides where requests go: every `url()` field, and anything else a
+     * connector marks with `'endpoint' => true` (a host fragment, say).
+     *
+     * @return string[]
+     */
+    public static function endpointNames(array $fields): array
+    {
+        $names = [];
+
+        foreach ($fields as $field) {
+            if ((($field['endpoint'] ?? false) || ($field['type'] ?? '') === 'url') && ($field['name'] ?? '') !== '') {
                 $names[] = $field['name'];
             }
         }

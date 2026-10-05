@@ -57,6 +57,19 @@ Nothing has a foreign key to a Commerce or Craft element except `erpy_accounts.u
 get deleted, and losing a sync history because somebody tidied up a product is worse than holding
 an id that no longer resolves.
 
+### Credentials (5.1.1)
+
+- `helpers\Secret` encrypts with the security key (`enc:` + base64). The `tokens` column is one
+  encrypted JSON bag; literal secret settings are encrypted per value, `$ENV` references stored as
+  written. Every reader goes through `Secret::decrypt`/`decodeTokens`, which still accept a
+  plaintext legacy row — `m261005_000000_encrypt_credentials` encrypts those.
+- **Repointing is admin-only.** A field declared with `Field::url()` (or `'endpoint' => true`) is
+  an endpoint. `ConnectionsController::requireAdminToRepoint()` refuses a non-admin who changes the
+  connector or any endpoint; `Connections::mergeSettings()` never carries a blank secret over a
+  repoint, and `save()` drops the tokens. Otherwise "Manage connections" + Test connection sends
+  the stored key to any host.
+- Webhooks: POST only, secret in `X-Erpy-Secret`, never the query string.
+
 ### Delta watermarks
 
 The watermark advances to the **start** of a run, never to the end, plus a two-minute overlap. A
@@ -101,6 +114,9 @@ the ERPs whose API is configured per customer (AFAS, Priority, Unit4, a publishe
 - **An ERP will echo your credential back inside its own error message.** The transport now
   redacts secrets out of non-2xx bodies before a connector — or a merchant's health screen — sees
   them. Success bodies are left alone because connectors have to parse them.
+- **A curly quote straight after an interpolated variable eats it**: `"“$handle”"` interpolates
+  `$handle”`, an undefined variable — which turned the webhook's 403 into a 500. Fourteen of them
+  shipped. Always brace: `{$handle}`. phpstan catches it.
 
 Vendor-specific traps live in each connector's class docblock, where somebody debugging that ERP
 will actually find them: NetSuite's three spellings of an account id, SAP B1's `tNO` string
@@ -116,8 +132,10 @@ No local PHP on this Mac. Everything runs inside the plugin-testing container:
 
 ```sh
 cd ~/Sites/plugin-testing
-ddev exec php /var/www/craft-erpy/tests/integration/checks.php      # 141 engine checks
+ddev exec php /var/www/craft-erpy/tests/integration/checks.php      # 144 engine checks
 ddev exec php /var/www/craft-erpy/tests/integration/connectors.php  # 306 conformance checks
+docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-erpy/tests/integration/security.php  # 12: encryption at rest, repoint guard over HTTP, webhook
+docker exec -w /sites/craft-erpy ddev-phpstan-runner-web bash -c 'vendor/bin/phpstan analyse --memory-limit=1G && vendor/bin/ecs check'
 ddev exec bash -c 'find /var/www/craft-erpy/src -name "*.php" -print0 | xargs -0 -n1 php -l'
 ```
 

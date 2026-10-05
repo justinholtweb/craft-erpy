@@ -40,13 +40,15 @@ class WebhookController extends Controller
             throw new ForbiddenHttpException('This connection has no webhook secret set, so it will not accept webhooks.');
         }
 
-        $provided = (string)($this->request->getHeaders()->get('X-Erpy-Secret')
-            ?: $this->request->getParam('secret', ''));
+        // POST, and the header only. Before 5.1.1 the secret could arrive as `?secret=` on a GET,
+        // which writes it into every access log and proxy log on the way.
+        $this->requirePostRequest();
+        $provided = (string)$this->request->getHeaders()->get('X-Erpy-Secret', '');
 
         // Constant-time, so the endpoint cannot be used to guess the secret one character at a
         // time. Both sides are hashed first because hash_equals needs equal-length strings.
         if (!hash_equals(hash('sha256', $expected), hash('sha256', $provided))) {
-            Craft::warning("Erpy rejected a webhook for “$connectionHandle” with a bad secret.", 'erpy');
+            Craft::warning("Erpy rejected a webhook for “{$connectionHandle}” with a bad secret.", 'erpy');
 
             throw new ForbiddenHttpException('Bad secret.');
         }

@@ -1,7 +1,7 @@
 {
     "name": "justinholtweb/craft-erpy",
     "description": "The ERP gateway for Craft Commerce — one sync engine, one mapping UI, one log, and a free add-on for every major ERP.",
-    "version": "5.1.0",
+    "version": "5.1.1",
     "type": "craft-plugin",
     "keywords": [
         "craftcms",
@@ -55,5 +55,10 @@
         "documentationUrl": "https://justinholt.com/plugins/craft-erpy/docs",
         "changelogUrl": "https://raw.githubusercontent.com/justinholtweb/craft-erpy/main/CHANGELOG.md",
         "class": "justinholtweb\\erpy\\Plugin"
+    },
+    "require-dev": {
+        "craftcms/ecs": "dev-main",
+        "craftcms/phpstan": "dev-main",
+        "phpstan/phpstan": "^1.12 || ^2.2"
     }
 }

@@ -108,6 +108,9 @@ class ConnectionsController extends Controller
             throw new NotFoundHttpException('No such connection.');
         }
 
+        $storedConnector = $connection->id ? $connection->connector : null;
+        $storedSettings = $connection->settings;
+
         $connection->name = (string)$this->request->getBodyParam('name', $connection->name);
         $connection->handle = (string)$this->request->getBodyParam('handle', $connection->handle);
         $connection->connector = (string)$this->request->getBodyParam('connector', $connection->connector);
@@ -115,6 +118,8 @@ class ConnectionsController extends Controller
         $connection->storeId = (int)$this->request->getBodyParam('storeId') ?: null;
         $connection->settings = array_merge($connection->settings, (array)$this->request->getBodyParam('settings', []));
         $connection->sync = $this->normaliseSync((array)$this->request->getBodyParam('sync', []));
+
+        $this->requireAdminToRepoint($connection, $storedConnector, $storedSettings);
 
         if (!$plugin->getConnections()->save($connection)) {
             $this->setFailFlash(Craft::t('erpy', 'Couldn’t save the connection.'));
@@ -126,6 +131,35 @@ class ConnectionsController extends Controller
         $this->setSuccessFlash(Craft::t('erpy', 'Connection saved.'));
 
         return $this->redirectToPostedUrl($connection);
+    }
+
+    /**
+     * Where a connection sends its requests — and its credentials — is an admin's decision.
+     *
+     * "Manage connections" covers names, credentials and what syncs. It does not cover pointing a
+     * connection at a different host or switching its connector: that is the move that, before
+     * 5.1.1, sent the stored credentials to a host of the editor's choosing, and it is how a
+     * connection reaches an internal address. Private hosts are not refused outright because
+     * on-premises ERPs (SAP Business One's Service Layer, a self-hosted Odoo) routinely live on one.
+     *
+     * @throws ForbiddenHttpException
+     */
+    private function requireAdminToRepoint(Connection $connection, ?string $storedConnector, array $storedSettings): void
+    {
+        if (Craft::$app->getUser()->getIsAdmin()) {
+            return;
+        }
+
+        if ($storedConnector !== null && $storedConnector !== $connection->connector) {
+            throw new ForbiddenHttpException(Craft::t('erpy', 'Only an admin can change which system a connection talks to.'));
+        }
+
+        $connector = $connection->getConnector();
+        $fields = $connector ? $connector::settingsFields() : [];
+
+        if (\justinholtweb\erpy\services\Connections::endpointsChanged($fields, $storedSettings, $connection->settings)) {
+            throw new ForbiddenHttpException(Craft::t('erpy', 'Only an admin can change where a connection sends its requests.'));
+        }
     }
 
     /**

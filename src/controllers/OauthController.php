@@ -7,6 +7,7 @@ use craft\helpers\StringHelper;
 use craft\helpers\UrlHelper;
 use craft\web\Controller;
 use justinholtweb\erpy\auth\OAuth2AuthorizationCode;
+use justinholtweb\erpy\base\Connector;
 use justinholtweb\erpy\Plugin;
 use yii\web\BadRequestHttpException;
 use yii\web\NotFoundHttpException;
@@ -47,7 +48,8 @@ class OauthController extends Controller
             throw new NotFoundHttpException('No such connection.');
         }
 
-        $auth = $connection->getConnector()?->auth();
+        $connector = $connection->getConnector();
+        $auth = $connector instanceof Connector ? $connector->auth() : null;
 
         if (!$auth instanceof OAuth2AuthorizationCode) {
             throw new BadRequestHttpException('This connector does not use OAuth.');
@@ -110,7 +112,8 @@ class OauthController extends Controller
             return $this->redirect($target);
         }
 
-        $auth = $connection->getConnector()?->auth();
+        $connector = $connection->getConnector();
+        $auth = $connector instanceof Connector ? $connector->auth() : null;
 
         if (!$auth instanceof OAuth2AuthorizationCode || $code === '') {
             throw new BadRequestHttpException('No authorisation code came back.');
@@ -142,7 +145,8 @@ class OauthController extends Controller
             throw new NotFoundHttpException('No such connection.');
         }
 
-        $auth = $connection->getConnector()?->auth();
+        $connector = $connection->getConnector();
+        $auth = $connector instanceof Connector ? $connector->auth() : null;
 
         if ($auth instanceof OAuth2AuthorizationCode) {
             $auth->revoke();

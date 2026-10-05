@@ -90,7 +90,7 @@ class ConnectionsController extends Controller
         $connection = Plugin::getInstance()->getConnections()->getByHandle($handle);
 
         if (!$connection) {
-            $this->stderr("No connection with the handle “$handle”.\n", Console::FG_RED);
+            $this->stderr("No connection with the handle “{$handle}”.\n", Console::FG_RED);
 
             return ExitCode::DATAERR;
         }
@@ -134,13 +134,13 @@ class ConnectionsController extends Controller
         $connection = $plugin->getConnections()->getByHandle($handle);
 
         if (!$connection) {
-            $this->stderr("No connection with the handle “$handle”.\n", Console::FG_RED);
+            $this->stderr("No connection with the handle “{$handle}”.\n", Console::FG_RED);
 
             return ExitCode::DATAERR;
         }
 
         if ($entity !== null && !Entity::exists($entity)) {
-            $this->stderr("“$entity” is not a known entity.\n", Console::FG_RED);
+            $this->stderr("“{$entity}” is not a known entity.\n", Console::FG_RED);
 
             return ExitCode::DATAERR;
         }

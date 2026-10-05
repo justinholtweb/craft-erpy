@@ -195,7 +195,7 @@ class Pricing extends Component
      */
     private function applicableRows(Connection $connection, string $sku, ?Account $account): array
     {
-        $key = $connection->id . '|' . $sku . '|' . ($account?->customerCode ?? '');
+        $key = $connection->id . '|' . $sku . '|' . ($account->customerCode ?? '');
 
         if (array_key_exists($key, $this->memo)) {
             return $this->memo[$key];

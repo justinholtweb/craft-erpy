@@ -57,7 +57,7 @@ class Orders extends Component
             // being non-null does not mean somebody registered. What a connector actually needs
             // to know is whether this order belongs to a real account.
             'isGuest' => $customer === null || !$customer->active,
-            'customerCode' => $account?->customerCode ?? $map->option('guestCustomerCode'),
+            'customerCode' => $account->customerCode ?? $map->option('guestCustomerCode'),
             'customerRemoteId' => $this->customerRemoteId($connection, $account?->customerCode),
             'billingAddress' => $this->addressFrom($order->getBillingAddress(), ErpAddress::TYPE_BILLING),
             'shippingAddress' => $this->addressFrom($order->getShippingAddress(), ErpAddress::TYPE_SHIPPING),
@@ -73,7 +73,7 @@ class Orders extends Component
             'couponCode' => $order->couponCode,
             'customerNote' => $order->message ?: null,
             'priceListCode' => $account?->priceListCode,
-            'paymentTermsCode' => $account?->paymentTermsCode ?? null,
+            'paymentTermsCode' => $account->paymentTermsCode ?? null,
             'salespersonCode' => $account?->salespersonCode,
             'warehouse' => $map->option('warehouse'),
         ]);
@@ -456,7 +456,7 @@ class Orders extends Component
             ]));
         }
 
-        return ApplyResult::updated($order?->id ?? 0, ['invoice' => [null, $document->invoiceNumber]]);
+        return ApplyResult::updated($order->id ?? 0, ['invoice' => [null, $document->invoiceNumber]]);
     }
 
     public function applyPayment(Connection $connection, ErpPayment $document, FieldMap $map, bool $dryRun = false): ApplyResult
@@ -488,7 +488,7 @@ class Orders extends Component
             ]));
         }
 
-        return ApplyResult::created($order?->id ?? 0);
+        return ApplyResult::created($order->id ?? 0);
     }
 
     public function findOrder(string $number): ?Order

@@ -67,7 +67,7 @@ class Connectors extends Component
             // Two add-ons claiming one handle would silently swap which ERP a live connection
             // talks to, so the first registration wins and the second is reported loudly.
             if (isset($connectors[$handle])) {
-                Craft::warning("Erpy has two connectors claiming the handle “$handle”: {$connectors[$handle]} and $class. The second was ignored.", 'erpy');
+                Craft::warning("Erpy has two connectors claiming the handle “{$handle}”: {$connectors[$handle]} and $class. The second was ignored.", 'erpy');
                 continue;
             }
 

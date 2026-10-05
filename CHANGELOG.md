@@ -1,5 +1,32 @@
 # Release Notes for Erpy
 
+## 5.1.1 - 2026-10-05
+
+> {warning} A user with **Add, edit and delete connections** can no longer change a connection's
+> connector or any of its endpoint URLs — only an admin can. When a connection is repointed, its
+> stored secrets and OAuth tokens are dropped and have to be entered again. Webhooks now need a
+> `POST` with the secret in an `X-Erpy-Secret` header; update any ERP-side webhook that sends
+> `?secret=`. Run `php craft up` after updating: a migration encrypts the credentials already
+> stored.
+
+### Security
+
+- A user who could edit a connection could point it at a host of their own with the secret field
+  left blank, press **Test connection**, and receive the stored API key or token. Changing the
+  connector or an endpoint is now admin-only, and a repointed connection never carries its old
+  secrets or tokens over.
+- OAuth tokens and literal secrets are now encrypted at rest with the site's security key. `$ENV`
+  references are stored as they are. Rows written before 5.1.1 keep working and are encrypted by
+  the migration.
+- The webhook endpoint accepted its secret as `?secret=` on a GET, which writes it into access and
+  proxy logs. It now accepts `POST` only, with the secret in the `X-Erpy-Secret` header.
+
+### Fixed
+
+- A webhook with a wrong secret answered 500 instead of 403. A curly quote straight after an
+  interpolated variable swallowed the variable name; thirteen other log and error messages had the
+  same bug.
+
 ## 5.1.0 - 2026-09-26
 
 ### Fixed

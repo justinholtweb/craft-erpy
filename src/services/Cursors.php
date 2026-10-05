@@ -11,7 +11,6 @@ use DateTime;
 use DateTimeInterface;
 use justinholtweb\erpy\db\Table;
 use justinholtweb\erpy\models\Connection;
-use justinholtweb\erpy\Plugin;
 
 /**
  * Delta-sync watermarks.

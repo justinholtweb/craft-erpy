@@ -60,13 +60,13 @@ class SyncController extends Controller
         $model = $plugin->getConnections()->getByHandle($connection);
 
         if (!$model) {
-            $this->stderr("No connection with the handle “$connection”.\n", Console::FG_RED);
+            $this->stderr("No connection with the handle “{$connection}”.\n", Console::FG_RED);
 
             return ExitCode::DATAERR;
         }
 
         if ($entity !== null && !Entity::exists($entity)) {
-            $this->stderr("“$entity” is not one of: " . implode(', ', Entity::all()) . "\n", Console::FG_RED);
+            $this->stderr("“{$entity}” is not one of: " . implode(', ', Entity::all()) . "\n", Console::FG_RED);
 
             return ExitCode::DATAERR;
         }
@@ -87,7 +87,7 @@ class SyncController extends Controller
             : $plugin->getSync()->runAll($model, $options);
 
         if ($runs === []) {
-            $this->stdout("Nothing is switched on to sync on “$connection”.\n", Console::FG_YELLOW);
+            $this->stdout("Nothing is switched on to sync on “{$connection}”.\n", Console::FG_YELLOW);
 
             return ExitCode::OK;
         }
@@ -213,7 +213,7 @@ class SyncController extends Controller
         $model = $plugin->getConnections()->getByHandle($connection);
 
         if (!$model) {
-            $this->stderr("No connection with the handle “$connection”.\n", Console::FG_RED);
+            $this->stderr("No connection with the handle “{$connection}”.\n", Console::FG_RED);
 
             return ExitCode::DATAERR;
         }

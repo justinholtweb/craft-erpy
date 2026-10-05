@@ -40,9 +40,6 @@ class Push extends Component
      */
     public const EVENT_BEFORE_PUSH = 'beforePush';
 
-    /** How long a worker may hold the lock on one document. */
-    private const LOCK_SECONDS = 120;
-
     // ---------------------------------------------------------------------------------------
     // Orders
     // ---------------------------------------------------------------------------------------
@@ -79,7 +76,7 @@ class Push extends Component
         ]);
         $this->trigger(self::EVENT_BEFORE_PUSH, $event);
 
-        return $event->isValid ? $event->document : null;
+        return $event->isValid && $event->document instanceof ErpOrder ? $event->document : null;
     }
 
     /**
@@ -139,7 +136,7 @@ class Push extends Component
         $account = Plugin::getInstance()->getAccounts()->forUser($user, $connection);
 
         $document = new ErpCustomer([
-            'code' => $account?->customerCode ?? '',
+            'code' => $account->customerCode ?? '',
             'name' => $user->fullName ?: $user->username,
             'email' => $user->email,
             'currency' => $account?->currency,

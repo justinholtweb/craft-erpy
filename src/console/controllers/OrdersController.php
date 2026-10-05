@@ -4,7 +4,6 @@ namespace justinholtweb\erpy\console\controllers;
 
 use craft\console\Controller;
 use craft\helpers\Console;
-use justinholtweb\erpy\base\Entity;
 use justinholtweb\erpy\models\Run;
 use justinholtweb\erpy\Plugin;
 use yii\console\ExitCode;
@@ -48,7 +47,7 @@ class OrdersController extends Controller
         $model = Plugin::getInstance()->getConnections()->getByHandle($connection);
 
         if (!$model) {
-            $this->stderr("No connection with the handle “$connection”.\n", Console::FG_RED);
+            $this->stderr("No connection with the handle “{$connection}”.\n", Console::FG_RED);
 
             return ExitCode::DATAERR;
         }
@@ -84,7 +83,7 @@ class OrdersController extends Controller
         $model = $plugin->getConnections()->getByHandle($connection);
 
         if (!$model) {
-            $this->stderr("No connection with the handle “$connection”.\n", Console::FG_RED);
+            $this->stderr("No connection with the handle “{$connection}”.\n", Console::FG_RED);
 
             return ExitCode::DATAERR;
         }
@@ -92,7 +91,7 @@ class OrdersController extends Controller
         $order = $plugin->getOrders()->findOrder($number);
 
         if (!$order) {
-            $this->stderr("No order numbered “$number”.\n", Console::FG_RED);
+            $this->stderr("No order numbered “{$number}”.\n", Console::FG_RED);
 
             return ExitCode::DATAERR;
         }
@@ -131,7 +130,7 @@ class OrdersController extends Controller
         $model = $plugin->getConnections()->getByHandle($connection);
 
         if (!$model) {
-            $this->stderr("No connection with the handle “$connection”.\n", Console::FG_RED);
+            $this->stderr("No connection with the handle “{$connection}”.\n", Console::FG_RED);
 
             return ExitCode::DATAERR;
         }

@@ -121,7 +121,7 @@ class Catalog extends Component
     }
 
     /**
-     * @return array{product:Product}&array<string,array{0:mixed,1:mixed}>
+     * @return array<string,mixed> `product` => the Product, and each changed field => [old, new]
      */
     private function populateProduct(Connection $connection, ?Product $product, ErpProduct $document, FieldMap $map, int $typeId, bool $isNew): array
     {
@@ -444,14 +444,14 @@ class Catalog extends Component
         ], $values), $values)->execute();
 
         if (!$existing) {
-            return ApplyResult::created($variant?->id ?? 0);
+            return ApplyResult::created($variant->id ?? 0);
         }
 
         if (abs((float)$existing['unitPrice'] - $document->unitPrice) < 0.0001) {
             return ApplyResult::skipped(Craft::t('erpy', 'Unchanged.'), $variant?->id);
         }
 
-        return ApplyResult::updated($variant?->id ?? 0, ['price' => [$existing['unitPrice'], $document->unitPrice]]);
+        return ApplyResult::updated($variant->id ?? 0, ['price' => [$existing['unitPrice'], $document->unitPrice]]);
     }
 
     /**

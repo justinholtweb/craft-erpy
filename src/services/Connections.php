@@ -9,7 +9,9 @@ use craft\helpers\Db;
 use craft\helpers\StringHelper;
 use justinholtweb\erpy\auth\OAuth2AuthorizationCode;
 use justinholtweb\erpy\base\Connector;
+use justinholtweb\erpy\base\Field;
 use justinholtweb\erpy\db\Table;
+use justinholtweb\erpy\helpers\Secret;
 use justinholtweb\erpy\models\Connection;
 use justinholtweb\erpy\records\ConnectionRecord;
 use Throwable;
@@ -120,14 +122,20 @@ class Connections extends Component
         $record->sync = json_encode($connection->sync);
 
         // A blank secret in a posted form means "leave it alone", not "erase it". The CP never
-        // sends a saved credential back to the browser, so it cannot send it back here either.
-        $record->settings = json_encode($this->mergeSettings($connection, $isNew));
+        // sends a saved credential back to the browser, so it cannot send it back here either —
+        // unless the connection now points somewhere else (see mergeSettings()).
+        $repointed = false;
+        $record->settings = json_encode($this->protectSecrets($connection, $this->mergeSettings($connection, $isNew, $repointed)));
 
         // Tokens belong to saveTokens() alone once a connection exists. The model being saved
         // was loaded when the edit screen was, and a sync may have rotated Exact's refresh token
         // since; writing the stale bag back would invalidate the connection on a routine save.
+        // The exception is a repointed connection: its tokens were issued by somebody else.
         if ($isNew) {
-            $record->tokens = json_encode($connection->tokens);
+            $record->tokens = Secret::encodeTokens($connection->tokens);
+        } elseif ($repointed) {
+            $record->tokens = Secret::encodeTokens([]);
+            $connection->tokens = [];
         }
 
         if ($isNew) {
@@ -158,7 +166,7 @@ class Connections extends Component
 
         Craft::$app->getDb()->createCommand()
             ->update(Table::CONNECTIONS, [
-                'tokens' => json_encode($connection->tokens),
+                'tokens' => Secret::encodeTokens($connection->tokens),
                 'dateUpdated' => Db::prepareDateForDb(new \DateTime()),
             ], ['id' => $connection->id])
             ->execute();
@@ -181,30 +189,78 @@ class Connections extends Component
         return $auth instanceof OAuth2AuthorizationCode ? $auth->describe() : null;
     }
 
-    private function mergeSettings(Connection $connection, bool $isNew): array
+    /**
+     * The settings to store: what was posted, with blank secrets carried over from the stored row.
+     *
+     * Not when the connection now points somewhere else — a different connector, or a changed
+     * endpoint (`Field::url()` and anything marked `endpoint`). Then the stored secrets and tokens
+     * stay behind, and only what was posted with the change is kept. Before 5.1.1 they were
+     * carried over, so pointing a connection at your own host with the password left blank, then
+     * pressing Test, sent the stored credentials there.
+     */
+    private function mergeSettings(Connection $connection, bool $isNew, bool &$repointed = false): array
     {
+        $repointed = false;
+
         if ($isNew) {
             return $connection->settings;
         }
 
-        $existing = (new Query())
-            ->select(['settings'])
+        $row = (new Query())
+            ->select(['settings', 'connector'])
             ->from(Table::CONNECTIONS)
             ->where(['id' => $connection->id])
-            ->scalar();
+            ->one();
 
-        $existing = json_decode((string)$existing, true) ?: [];
+        $existing = json_decode((string)($row['settings'] ?? ''), true) ?: [];
         $merged = $connection->settings;
-
         $connector = $connection->getConnector();
+        $fields = $connector ? $connector::settingsFields() : [];
 
-        foreach ($connector ? \justinholtweb\erpy\base\Field::secretNames($connector::settingsFields()) : [] as $name) {
+        $repointed = ($row['connector'] ?? $connection->connector) !== $connection->connector
+            || self::endpointsChanged($fields, $existing, $merged);
+
+        if ($repointed) {
+            return $merged;
+        }
+
+        foreach (Field::secretNames($fields) as $name) {
             if (($merged[$name] ?? '') === '' && ($existing[$name] ?? '') !== '') {
                 $merged[$name] = $existing[$name];
             }
         }
 
         return $merged;
+    }
+
+    /**
+     * Whether any endpoint setting differs between two settings arrays.
+     *
+     * @param array<int, array<string, mixed>> $fields
+     */
+    public static function endpointsChanged(array $fields, array $before, array $after): bool
+    {
+        foreach (Field::endpointNames($fields) as $name) {
+            if (trim((string)($before[$name] ?? '')) !== trim((string)($after[$name] ?? ''))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Literal secrets encrypted for storage; `$ENV` references left as they are. */
+    private function protectSecrets(Connection $connection, array $settings): array
+    {
+        $connector = $connection->getConnector();
+
+        foreach ($connector ? Field::secretNames($connector::settingsFields()) : [] as $name) {
+            if (isset($settings[$name])) {
+                $settings[$name] = Secret::protectSetting($settings[$name]);
+            }
+        }
+
+        return $settings;
     }
 
     public function delete(Connection $connection): bool
@@ -248,7 +304,7 @@ class Connections extends Component
         ]);
 
         $connector = $connection->getConnector();
-        $secrets = $connector ? \justinholtweb\erpy\base\Field::secretNames($connector::settingsFields()) : [];
+        $secrets = $connector ? Field::secretNames($connector::settingsFields()) : [];
 
         foreach ($connection->settings as $key => $value) {
             if (!in_array($key, $secrets, true)) {

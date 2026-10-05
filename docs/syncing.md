@@ -109,3 +109,12 @@ A connector that supports them exposes a webhook URL on its connection. A webhoo
 anything different from a scheduled run — it starts the same sync, scoped to what the ERP said
 changed. That is deliberate: a webhook path with its own write logic is a second implementation
 that drifts.
+
+The ERP must `POST` to the URL and send the connection's webhook secret in an `X-Erpy-Secret`
+header. A secret in the query string or the body is refused — query strings end up in access
+logs.
+
+```http
+POST /erpy/webhook/acme?entity=inventory
+X-Erpy-Secret: <the connection's webhook secret>
+```
