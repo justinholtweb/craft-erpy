@@ -1,7 +1,7 @@
 {
     "name": "justinholtweb/craft-erpy",
     "description": "The ERP gateway for Craft Commerce — one sync engine, one mapping UI, one log, and a free add-on for every major ERP.",
-    "version": "5.1.1",
+    "version": "5.2.0",
     "type": "craft-plugin",
     "keywords": [
         "craftcms",

@@ -1,7 +1,6 @@
 # Release Notes for Erpy
 
-## Unreleased
-
+## 5.2.0 - 2026-10-09
 ### Added
 
 - Failure alerts. Erpy now emails the addresses in **Settings → Alerts** — and can post to a Slack
