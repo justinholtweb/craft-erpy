@@ -21,11 +21,15 @@ class Install extends Migration
         $this->createTables();
         $this->createIndexes();
 
+        // Failure alerts (5.2.0). Defined once, in the migration that added it.
+        m261009_000000_alerts::createAlertsTable($this);
+
         return true;
     }
 
     public function safeDown(): bool
     {
+        $this->dropTableIfExists(Table::ALERTS);
         $this->dropTableIfExists(Table::RUN_ITEMS);
         $this->dropTableIfExists(Table::RUNS);
         $this->dropTableIfExists(Table::LOG);

@@ -95,6 +95,132 @@
 
 <hr>
 
+<h2>{{ 'Alerts'|t('erpy') }}</h2>
+
+<p class="light">{{ 'One message when a connection gets into trouble, one when it is fine again — never one per failure. Alerts are checked after every run and by `php craft erpy/sync/due`; a stalled schedule can only be noticed by the second, so put that (or `erpy/alerts/check`) on cron.'|t('erpy') }}</p>
+
+{{ forms.autosuggestField({
+    label: 'Email alerts to'|t('erpy'),
+    instructions: 'Addresses separated by commas, or an environment variable. Leave empty for no email.'|t('erpy'),
+    id: 'alertRecipients',
+    name: 'alertRecipients',
+    suggestEnvVars: true,
+    value: settings.alertRecipients,
+    errors: settings.getErrors('alertRecipients')
+}) }}
+
+{{ forms.autosuggestField({
+    label: 'Slack or Teams webhook URL'|t('erpy'),
+    instructions: 'Optional. An incoming-webhook URL — best kept in an environment variable, because the URL is the credential. Only public hosts are allowed and redirects are never followed.'|t('erpy'),
+    id: 'alertWebhookUrl',
+    name: 'alertWebhookUrl',
+    suggestEnvVars: true,
+    value: settings.alertWebhookUrl,
+    errors: settings.getErrors('alertWebhookUrl')
+}) }}
+
+{{ forms.selectField({
+    label: 'Webhook format'|t('erpy'),
+    id: 'alertWebhookFormat',
+    name: 'alertWebhookFormat',
+    options: [
+        { value: 'slack', label: 'Slack'|t('erpy') },
+        { value: 'teams', label: 'Microsoft Teams'|t('erpy') },
+        { value: 'json', label: 'Plain JSON (your own receiver)'|t('erpy') },
+    ],
+    value: settings.alertWebhookFormat,
+    errors: settings.getErrors('alertWebhookFormat')
+}) }}
+
+{{ forms.autosuggestField({
+    label: 'Webhook signing secret'|t('erpy'),
+    instructions: 'Optional. When set, each webhook carries `X-Erpy-Timestamp` and `X-Erpy-Signature: sha256=…`, an HMAC of `timestamp.body`, so your own receiver can verify it. Slack and Teams ignore it.'|t('erpy'),
+    id: 'alertWebhookSecret',
+    name: 'alertWebhookSecret',
+    suggestEnvVars: true,
+    value: settings.alertWebhookSecret
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Alert when documents keep failing'|t('erpy'),
+    id: 'alertOnDeadLetters',
+    name: 'alertOnDeadLetters',
+    on: settings.alertOnDeadLetters,
+    toggle: 'alert-deadletters'
+}) }}
+
+<div id="alert-deadletters" class="{{ settings.alertOnDeadLetters ? '' : 'hidden' }}">
+    {{ forms.textField({
+        label: 'Failures that open an alert'|t('erpy'),
+        instructions: 'This many documents landing on the Problems screen inside the window below. It closes again after a whole window with none.'|t('erpy'),
+        id: 'alertDeadLetterThreshold',
+        name: 'alertDeadLetterThreshold',
+        type: 'number',
+        size: 5,
+        value: settings.alertDeadLetterThreshold,
+        errors: settings.getErrors('alertDeadLetterThreshold')
+    }) }}
+
+    {{ forms.textField({
+        label: 'Window'|t('erpy'),
+        instructions: 'Minutes.'|t('erpy'),
+        id: 'alertDeadLetterWindowMinutes',
+        name: 'alertDeadLetterWindowMinutes',
+        type: 'number',
+        size: 5,
+        value: settings.alertDeadLetterWindowMinutes,
+        errors: settings.getErrors('alertDeadLetterWindowMinutes')
+    }) }}
+</div>
+
+{{ forms.lightswitchField({
+    label: 'Alert when the ERP refuses the credentials'|t('erpy'),
+    instructions: 'A 401 after Erpy has already tried to re-authenticate, or an OAuth refresh the ERP will not honour. Nothing syncs until somebody fixes it.'|t('erpy'),
+    id: 'alertOnAuthFailure',
+    name: 'alertOnAuthFailure',
+    on: settings.alertOnAuthFailure
+}) }}
+
+{{ forms.textField({
+    label: 'Alert when a scheduled sync stalls after'|t('erpy'),
+    instructions: 'Hours without a successful run of an entity that has an interval — or twice its interval, if that is longer. Zero switches it off.'|t('erpy'),
+    id: 'alertStallHours',
+    name: 'alertStallHours',
+    type: 'number',
+    size: 5,
+    value: settings.alertStallHours,
+    errors: settings.getErrors('alertStallHours')
+}) }}
+
+{{ forms.textField({
+    label: 'Quiet period after a recovery'|t('erpy'),
+    instructions: 'Minutes. An incident that comes straight back is reported when this ends, if it is still happening — so a flapping connection cannot fill an inbox.'|t('erpy'),
+    id: 'alertCooldownMinutes',
+    name: 'alertCooldownMinutes',
+    type: 'number',
+    size: 5,
+    value: settings.alertCooldownMinutes,
+    errors: settings.getErrors('alertCooldownMinutes')
+}) }}
+
+<div class="field">
+    <button type="button" class="btn" id="erpy-test-alert">{{ 'Send a test alert'|t('erpy') }}</button>
+    <p class="light">{{ 'Uses the saved settings — save first.'|t('erpy') }}</p>
+</div>
+
+{% js %}
+    document.getElementById('erpy-test-alert')?.addEventListener('click', (e) => {
+        const button = e.currentTarget;
+        button.classList.add('loading');
+        Craft.sendActionRequest('POST', 'erpy/alerts/test')
+            .then((response) => Craft.cp.displaySuccess(response.data.message))
+            .catch(({response}) => Craft.cp.displayError(response?.data?.message || Craft.t('erpy', 'The test could not be sent.')))
+            .finally(() => button.classList.remove('loading'));
+    });
+{% endjs %}
+
+<hr>
+
 <h2>{{ 'Logging'|t('erpy') }}</h2>
 
 {{ forms.lightswitchField({

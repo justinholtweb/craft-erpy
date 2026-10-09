@@ -138,8 +138,6 @@ class SyncController extends Controller
 
         if ($due === []) {
             $this->stdout("Nothing is due.\n", Console::FG_GREY);
-
-            return ExitCode::OK;
         }
 
         foreach ($due as $item) {
@@ -148,6 +146,13 @@ class SyncController extends Controller
                 'trigger' => Run::TRIGGER_SCHEDULE,
             ]);
             $this->report($run);
+        }
+
+        // Cron is the one place that runs when nothing else does, so it is where a stall is seen.
+        foreach ($plugin->getAlerts()->check() as $result) {
+            if ($result['transition'] !== null) {
+                $this->stdout(sprintf("Alert %s: %s on %s\n", $result['transition'], $result['incident'], $result['connection']), Console::FG_YELLOW);
+            }
         }
 
         return ExitCode::OK;

@@ -118,6 +118,13 @@ rather than a surprise.
 `scheduleEnabled` lets scheduled syncs run from Craft's queue. For a large catalogue, run
 `erpy/sync/due` from cron instead — cron has no request timeout. See [Syncing](../syncing).
 
+### Alerts
+
+Who is told when a connection gets into trouble — dead letters piling up, the ERP refusing the
+credentials, a scheduled sync that has stopped — by email and optionally Slack or Teams. One
+message when it starts, one when it clears. Every setting and threshold is on the
+[Alerts](../alerts) page.
+
 ## Permissions
 
 Erpy registers its own permissions, so a warehouse manager can watch activity without being able

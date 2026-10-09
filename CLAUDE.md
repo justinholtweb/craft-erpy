@@ -94,6 +94,50 @@ the ERPs whose API is configured per customer (AFAS, Priority, Unit4, a publishe
   rather than taking the storefront down.
 - A log write must never be the reason a sync fails.
 
+## Failure alerts (reference for the connector family)
+
+Built in Erpy first (2026-10-09) as the Theme 1 reference; my, lexies, zo, bird, sager, vismaz and
+exactly copy it. There is no shared package — copy the files and change the namespace.
+
+**What it does.** Three incidents per connection: *dead letters* (N failures in a window, closes
+after a whole quiet window: hysteresis), *auth* (a final 401 or a refused OAuth grant, pushed as a
+signal and cleared by the next authenticated 2xx), *stalled* (no successful pull of a scheduled
+entity for `max(alertStallHours, 2 × interval)`). Each is one latch row, unique on
+`(connectionId, incident)`: one message when it opens, one when it clears, `quietUntil` holds a
+reopening inside `alertCooldownMinutes`. A send is *claimed* with a conditional UPDATE and released
+if every channel failed, so two checkers cannot both send and a mail outage delays rather than
+loses. Disabled connections are skipped, never "recovered".
+
+**Files to copy:**
+
+| File | Adapt |
+|---|---|
+| `src/services/Alerts.php` | the three `measure()` cases to your plugin's tables (dead letters / failed-sync log, run history, intervals); `redact()`'s secret lookup; CP URLs in `compose()` |
+| `src/events/AlertEvent.php` | namespace |
+| `src/helpers/Ip.php` | namespace only — keep identical to craft-eye/Control Tower/Fjord |
+| `src/migrations/m261009_000000_alerts.php` | table name + FK target; call `createAlertsTable()` from `Install` too; bump `schemaVersion` |
+| `src/widgets/HealthWidget.php` + `src/templates/_widgets/health.twig` | permission, columns |
+| `src/console/controllers/AlertsController.php` | handle (`<plugin>/alerts/check`, `/test`) |
+| `src/controllers/AlertsController.php` | admin-only "Send a test alert"; reads **saved** settings, never a URL from the request |
+| `Settings` alert block + `recipientList()`/validators, and the settings-template section | nothing `required`; `$ENV` via `autosuggestField` |
+| `tests/integration/alerts.php` | fixture connection, how a dead letter / 401 / run is produced |
+
+**Hooks to add:** `Alerts::afterRun()` where a run finishes (here `Runs::finish()`);
+`noteAuthFailure()`/`noteAuthSuccess()` where the HTTP client sees a final 401 / an authenticated
+2xx (here `Transport::signalAuth()`) and where an OAuth grant is refused (`BaseAuth::grantRefused()`,
+4xx only — status 0 is the network, not auth); `check()` from the plugin's scheduler/cron command
+(here `erpy/sync/due` and `ScheduledSyncJob`). Register the widget and the `alerts` component.
+A single-connection plugin (most of the family) uses a pseudo-connection id or drops the column.
+
+**Do not change when porting:** the conditional-UPDATE claim/release, redaction before anything
+leaves the site, the webhook through `webhookTarget()` (scheme, no userinfo, `Ip::resolvePublic`,
+`CURLOPT_RESOLVE` pin, `allow_redirects => false`, curl-only client), the HMAC header when a secret
+is set, and every alert path being fail-open (a sync must never fail because an alert could not).
+
+**Known gap found here:** nothing in Erpy queues `ScheduledSyncJob` (it is defined, never pushed),
+so `scheduleEnabled` alone does not schedule anything — `erpy/sync/due` on cron is what runs.
+The stall alert is what would tell a merchant that.
+
 ## Traps found while building this
 
 - **Twig cannot call a static method on a class name.** Passing a `class-string` to a template and
@@ -135,6 +179,7 @@ cd ~/Sites/plugin-testing
 ddev exec php /var/www/craft-erpy/tests/integration/checks.php      # 144 engine checks
 ddev exec php /var/www/craft-erpy/tests/integration/connectors.php  # 306 conformance checks
 docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-erpy/tests/integration/security.php  # 12: encryption at rest, repoint guard over HTTP, webhook
+docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-erpy/tests/integration/alerts.php    # failure alerts: latch, mail, SSRF, webhook, widget, test action over HTTP
 docker exec -w /sites/craft-erpy ddev-phpstan-runner-web bash -c 'vendor/bin/phpstan analyse --memory-limit=1G && vendor/bin/ecs check'
 ddev exec bash -c 'find /var/www/craft-erpy/src -name "*.php" -print0 | xargs -0 -n1 php -l'
 ```

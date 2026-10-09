@@ -8,15 +8,18 @@ use craft\base\Plugin as BasePlugin;
 use craft\commerce\elements\Order;
 use craft\commerce\events\LineItemEvent;
 use craft\commerce\services\LineItems;
+use craft\events\RegisterComponentTypesEvent;
 use craft\events\RegisterUrlRulesEvent;
 use craft\events\RegisterUserPermissionsEvent;
 use craft\helpers\UrlHelper;
+use craft\services\Dashboard;
 use craft\services\Gc;
 use craft\services\UserPermissions;
 use craft\web\twig\variables\CraftVariable;
 use craft\web\UrlManager;
 use justinholtweb\erpy\models\Settings;
 use justinholtweb\erpy\services\Accounts;
+use justinholtweb\erpy\services\Alerts;
 use justinholtweb\erpy\services\Catalog;
 use justinholtweb\erpy\services\Connections;
 use justinholtweb\erpy\services\Connectors;
@@ -31,6 +34,7 @@ use justinholtweb\erpy\services\Push;
 use justinholtweb\erpy\services\Runs;
 use justinholtweb\erpy\services\Sync;
 use justinholtweb\erpy\twig\ErpyVariable;
+use justinholtweb\erpy\widgets\HealthWidget;
 use yii\base\Event;
 
 /**
@@ -57,13 +61,14 @@ use yii\base\Event;
  * @property-read Accounts $accounts
  * @property-read Orders $orders
  * @property-read Pricing $pricing
+ * @property-read Alerts $alerts
  * @method Settings getSettings()
  */
 class Plugin extends BasePlugin
 {
     public const HANDLE = 'erpy';
 
-    public string $schemaVersion = '5.1.1';
+    public string $schemaVersion = '5.2.0';
 
     public bool $hasCpSettings = true;
 
@@ -87,6 +92,7 @@ class Plugin extends BasePlugin
                 'accounts' => ['class' => Accounts::class],
                 'orders' => ['class' => Orders::class],
                 'pricing' => ['class' => Pricing::class],
+                'alerts' => ['class' => Alerts::class],
             ],
         ];
     }
@@ -99,6 +105,7 @@ class Plugin extends BasePlugin
         $this->_registerPermissions();
         $this->_registerRoutes();
         $this->_registerGarbageCollection();
+        $this->_registerWidgets();
 
         // Everything below reaches into an order or a purchasable. The plugin can be installed
         // while Commerce is disabled or mid-upgrade, and a fatal during a Commerce update is a
@@ -198,6 +205,11 @@ class Plugin extends BasePlugin
     public function getPricing(): Pricing
     {
         return $this->get('pricing');
+    }
+
+    public function getAlerts(): Alerts
+    {
+        return $this->get('alerts');
     }
 
     // ---------------------------------------------------------------------------------------
@@ -426,6 +438,17 @@ class Plugin extends BasePlugin
                 if ($price !== null) {
                     $lineItem->setPrice($price);
                 }
+            },
+        );
+    }
+
+    private function _registerWidgets(): void
+    {
+        Event::on(
+            Dashboard::class,
+            Dashboard::EVENT_REGISTER_WIDGET_TYPES,
+            static function(RegisterComponentTypesEvent $event) {
+                $event->types[] = HealthWidget::class;
             },
         );
     }

@@ -36,6 +36,13 @@ class ScheduledSyncJob extends BaseJob
             ]));
         }
 
+        // The only check that can notice a stall: when nothing runs, nothing else looks.
+        try {
+            $plugin->getAlerts()->check();
+        } catch (\Throwable $e) {
+            Craft::warning('Erpy could not check for failure alerts: ' . $e->getMessage(), 'erpy');
+        }
+
         $this->setProgress($queue, 1);
     }
 

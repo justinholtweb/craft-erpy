@@ -206,11 +206,40 @@ class Transport
                 continue;
             }
 
+            $this->signalAuth($response);
+
             if (!$this->shouldRetry($response, $attempt)) {
                 return $response;
             }
 
             $this->sleep($this->backoffSeconds($response, $attempt));
+        }
+    }
+
+    /**
+     * Tell the failure alerts how authentication is going. Only for an authenticated API request:
+     * a token endpoint's own transport has no auth, and its refusals are reported by the strategy,
+     * which knows what it was trying to do.
+     */
+    private function signalAuth(Response $response): void
+    {
+        if (!$this->connection?->id || $this->auth === null) {
+            return;
+        }
+
+        $alerts = Plugin::getInstance()?->getAlerts();
+
+        if ($alerts === null) {
+            return;
+        }
+
+        // Reaching here with a 401 means re-authenticating was tried, or was not possible.
+        if ($response->status === 401) {
+            $alerts->noteAuthFailure($this->connection, Craft::t('erpy', 'The ERP refused the credentials: {message}', [
+                'message' => $response->errorMessage(),
+            ]));
+        } elseif ($response->ok()) {
+            $alerts->noteAuthSuccess($this->connection);
         }
     }
 

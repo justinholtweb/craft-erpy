@@ -94,6 +94,9 @@ php craft erpy/orders/retry acme    # resend everything on the Problems screen
 A refusal the connector marked as permanent is not retried automatically. One marked retryable is,
 up to `pushMaxAttempts`, and then it dead-letters for good rather than queueing forever.
 
+Nobody has to remember to look: when documents start piling up here, [Alerts](../alerts) emails
+the people in `alertRecipients`, once, with a link to this screen filtered to that connection.
+
 ## The log
 
 **Erpy → Log** is every request and response, with credentials redacted at the transport — so

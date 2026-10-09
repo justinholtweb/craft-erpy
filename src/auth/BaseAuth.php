@@ -48,6 +48,22 @@ abstract class BaseAuth implements AuthInterface
         return $this->http;
     }
 
+    /**
+     * Report a refused grant to the failure alerts. A network failure (status 0) is not an
+     * authentication problem and is left to the retry and dead-letter machinery.
+     */
+    protected function grantRefused(\justinholtweb\erpy\base\Response $response, string $what): void
+    {
+        if ($response->status < 400 || $response->status >= 500 || empty($this->connection->id)) {
+            return;
+        }
+
+        Plugin::getInstance()?->getAlerts()->noteAuthFailure($this->connection, Craft::t('erpy', '{what} was refused: {message}', [
+            'what' => $what,
+            'message' => $response->errorMessage(),
+        ]));
+    }
+
     public function query(): array
     {
         return [];

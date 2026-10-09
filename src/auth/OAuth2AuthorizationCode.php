@@ -178,6 +178,13 @@ class OAuth2AuthorizationCode extends BaseAuth
         if (!$response->ok()) {
             Craft::warning('Erpy OAuth grant failed: ' . $response->errorMessage(), 'erpy');
 
+            // A refused refresh is the consent expiring or being revoked: nothing syncs again
+            // until somebody presses Reconnect, so it is worth an alert. A refused code exchange
+            // has the merchant looking at the screen already.
+            if (($params['grant_type'] ?? '') === 'refresh_token') {
+                $this->grantRefused($response, Craft::t('erpy', 'Refreshing the OAuth token'));
+            }
+
             return false;
         }
 

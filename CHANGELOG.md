@@ -1,5 +1,23 @@
 # Release Notes for Erpy
 
+## Unreleased
+
+### Added
+
+- Failure alerts. Erpy now emails the addresses in **Settings → Alerts** — and can post to a Slack
+  or Teams incoming webhook, or a signed JSON one — when a connection gets into trouble: documents
+  piling up on the Problems screen, the ERP refusing the credentials or an OAuth refresh, or a
+  scheduled sync that has stopped producing successful runs. One message when it starts, one when
+  it clears, with a quiet period for a connection that flaps. Bodies are redacted and link to the
+  Problems screen for that connection. The webhook URL is held to the family SSRF rules: public
+  hosts only, the connection pinned to the checked address, no redirects.
+- An **ERP health** Dashboard widget: each connection's latest run, unresolved problems and open
+  incidents.
+- `php craft erpy/alerts/check` and `php craft erpy/alerts/test`. `erpy/sync/due` now runs the
+  check after its syncs, and every run checks for dead-letter and stall incidents when it
+  finishes, so alerts work without any cron for everything except a stall.
+- `Alerts::EVENT_BEFORE_NOTIFY`, to reword or suppress an alert.
+
 ## 5.1.1 - 2026-10-05
 
 > {warning} A user with **Add, edit and delete connections** can no longer change a connection's

@@ -1,0 +1,46 @@
+{# The Dashboard tile. `overview` comes from Alerts::overview(): one row per connection. #}
+{% if overview|length %}
+    <table class="data fullwidth">
+        <thead>
+            <tr>
+                <th scope="col">{{ 'Connection'|t('erpy') }}</th>
+                <th scope="col">{{ 'Last run'|t('erpy') }}</th>
+                <th scope="col">{{ 'Problems'|t('erpy') }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in overview %}
+                {% set connection = row.connection %}
+                <tr>
+                    <td>
+                        <a href="{{ url('erpy/connections/' ~ connection.id) }}">{{ connection.name }}</a>
+                        {% if not connection.enabled %}
+                            <span class="light">({{ 'disabled'|t('erpy') }})</span>
+                        {% endif %}
+                        {% for incident in row.incidents %}
+                            <div class="error" title="{{ incident.detail }}">{{ incident.label }}</div>
+                        {% endfor %}
+                    </td>
+                    <td>
+                        {% if row.lastRun %}
+                            <a href="{{ url('erpy/runs/' ~ row.lastRun.id) }}">
+                                <span class="status {{ row.lastRun.statusColor() }}"></span>{{ row.lastRun.dateCreated ? row.lastRun.dateCreated|timestamp('short') : '' }}
+                            </a>
+                        {% else %}
+                            <span class="light">{{ 'Never run'|t('erpy') }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if row.problems %}
+                            <a href="{{ url('erpy/problems', { connection: connection.id }) }}" class="error">{{ row.problems }}</a>
+                        {% else %}
+                            <span class="light">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p class="light">{{ 'No ERP connections yet.'|t('erpy') }} <a href="{{ url('erpy/connections') }}">{{ 'Add one'|t('erpy') }}</a></p>
+{% endif %}

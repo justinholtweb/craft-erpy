@@ -87,6 +87,9 @@ class Runs extends Component
         ], ['id' => $run->id])->execute();
 
         Plugin::getInstance()->getLog()->setRunId(null);
+
+        // Fail-open inside: a dead-letter or stall alert, or its recovery, without needing cron.
+        Plugin::getInstance()->getAlerts()->afterRun($run);
     }
 
     /**

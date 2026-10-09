@@ -99,6 +99,7 @@ class OAuth2ClientCredentials extends BaseAuth
 
         if (!$response->ok()) {
             Craft::warning('Erpy could not get an access token: ' . $response->errorMessage(), 'erpy');
+            $this->grantRefused($response, Craft::t('erpy', 'Getting an access token'));
 
             return null;
         }

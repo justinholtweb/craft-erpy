@@ -139,10 +139,28 @@ php craft erpy/orders/missing acme       # completed orders the ERP never receiv
 php craft erpy/orders/push acme 1000123
 php craft erpy/orders/push acme 1000123 --dry-run   # show the payload, send nothing
 php craft erpy/orders/retry acme         # resend everything on the Problems screen
+
+php craft erpy/alerts/check              # evaluate failure alerts now (erpy/sync/due does it too)
+php craft erpy/alerts/test               # send a sample alert through every configured channel
 ```
 
 For a large catalogue, run `erpy/sync/due` from cron rather than relying on the queue: cron has no
 request timeout.
+
+## Alerts
+
+Problems only help if somebody looks. Erpy emails the addresses in **Settings → Alerts** — and
+optionally posts to a Slack or Teams webhook — when a connection gets into trouble:
+
+- **Documents failing**: N dead letters inside a window (5 in an hour by default)
+- **Authentication failed**: a 401 that re-authenticating did not fix, or a refused OAuth refresh
+- **Scheduled sync stalled**: no successful pull of a scheduled entity for X hours
+
+One message when an incident starts, one when it clears, held through a quiet period if a
+connection flaps. Bodies are redacted and link straight to the Problems screen. The webhook URL
+goes through the same SSRF guard as the rest of the family: public hosts only, pinned, no
+redirects. A **Dashboard widget** shows each connection's last run, open problems and open
+incidents. See [Alerts](https://justinholt.com/plugins/craft-erpy/docs/alerts).
 
 ## Writing a connector
 
@@ -216,6 +234,11 @@ Event::on(Sync::class, Sync::EVENT_BEFORE_APPLY_DOCUMENT, function(ApplyDocument
 // Adjust an outbound document before the connector sees it
 Event::on(Push::class, Push::EVENT_BEFORE_PUSH, function(BuildDocumentEvent $e) {
     $e->document->customFields['ProjectCode'] = $e->source->myProjectField->value;
+});
+
+// Reword or swallow a failure alert
+Event::on(Alerts::class, Alerts::EVENT_BEFORE_NOTIFY, function(AlertEvent $e) {
+    $e->isValid = $e->connection?->handle !== 'sandbox';
 });
 ```
 

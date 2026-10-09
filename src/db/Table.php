@@ -36,4 +36,7 @@ abstract class Table
 
     /** The B2B profile and credit standing of a Craft user, as the ERP sees them. */
     public const ACCOUNTS = '{{%erpy_accounts}}';
+
+    /** Failure-alert latches: one row per connection and incident type. */
+    public const ALERTS = '{{%erpy_alerts}}';
 }
