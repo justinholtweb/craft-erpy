@@ -326,7 +326,15 @@ class Push extends Component
      *
      * Rebuilt from Commerce when the source record is still there, because a merchant who fixed
      * the order expects the fix to be what goes out. Only when it has been deleted does the
-     * stored copy get used.
+     * stored copy get used. A payment, customer or any other dead letter is sent as itself, never
+     * by re-exporting the order it belongs to.
+     *
+     * Never forced. A retry is a second attempt at the send that failed, not a resend: if the
+     * identity map says the ERP has the document by now — a queue retry got it there, or another
+     * tab's "Retry" did — it is reported as already there. Forcing it handed the connector the
+     * remote id, which every add-on reads as "skip the duplicate check and post another", so a
+     * stale Retry button booked a second sales order or invoice. A deliberate resend is still
+     * available as `erpy/orders/push --force`.
      */
     public function replay(Connection $connection, DeadLetter $letter): bool
     {
@@ -336,7 +344,7 @@ class Push extends Component
                 : Plugin::getInstance()->getOrders()->findOrder($letter->naturalKey);
 
             if ($order) {
-                return $this->order($connection, $order, ['force' => true, 'trigger' => Run::TRIGGER_MANUAL])->success;
+                return $this->order($connection, $order, ['trigger' => Run::TRIGGER_MANUAL])->success;
             }
         }
 
@@ -345,7 +353,6 @@ class Push extends Component
         $document = new $class($letter->documentArray());
 
         return $this->deliver($connection, $letter->entity, $document, $letter->localId, [
-            'force' => true,
             'trigger' => Run::TRIGGER_MANUAL,
         ])->success;
     }

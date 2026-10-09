@@ -155,6 +155,19 @@ class DeadLetters extends Component
             return false;
         }
 
+        // The letter the caller holds can be stale: a Problems page left open, or a "retry
+        // everything" pass that listed it before a queue retry delivered it. Once it is resolved
+        // there is nothing left to send, and sending anyway is how one order gets booked twice.
+        if ($letter->id !== null) {
+            $current = $this->getById($letter->id);
+
+            if ($current === null || $current->isResolved()) {
+                return $current !== null;
+            }
+
+            $letter = $current;
+        }
+
         if ($letter->direction === Direction::PUSH) {
             $result = Plugin::getInstance()->getPush()->replay($connection, $letter);
         } else {

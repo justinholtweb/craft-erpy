@@ -180,6 +180,7 @@ ddev exec php /var/www/craft-erpy/tests/integration/checks.php      # 144 engine
 ddev exec php /var/www/craft-erpy/tests/integration/connectors.php  # 306 conformance checks
 docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-erpy/tests/integration/security.php  # 12: encryption at rest, repoint guard over HTTP, webhook
 docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-erpy/tests/integration/alerts.php    # failure alerts: latch, mail, SSRF, webhook, widget, test action over HTTP
+docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-erpy/tests/integration/replay.php    # 9: dead-letter retry never double-books (MockHandler ERP, POSTs counted per endpoint)
 docker exec -w /sites/craft-erpy ddev-phpstan-runner-web bash -c 'vendor/bin/phpstan analyse --memory-limit=1G && vendor/bin/ecs check'
 ddev exec bash -c 'find /var/www/craft-erpy/src -name "*.php" -print0 | xargs -0 -n1 php -l'
 ```

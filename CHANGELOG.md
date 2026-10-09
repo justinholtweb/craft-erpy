@@ -18,6 +18,19 @@
   finishes, so alerts work without any cron for everything except a stall.
 - `Alerts::EVENT_BEFORE_NOTIFY`, to reword or suppress an alert.
 
+### Fixed
+
+- Retrying a problem could book a second sales order, invoice or payment in the ERP. Every retry
+  was sent as a forced push, which hands the add-on the ERP's id for the document — and every
+  add-on reads that as "skip the duplicate check and post another". A **Retry** button on a
+  Problems page left open while the queue's own retry got the order through, a **Retry
+  everything** or `erpy/orders/retry` pass that listed a problem just before it cleared, or a
+  retry of a forced resend that had failed all posted the document again. A retry is now a second
+  attempt rather than a resend: it re-reads the problem and sends nothing if it has been resolved,
+  and it reports a document the identity map already has as already there. A failed payment or
+  refund is still retried as itself, never by re-exporting its order. A deliberate resend is
+  `erpy/orders/push --force`.
+
 ## 5.1.1 - 2026-10-05
 
 > {warning} A user with **Add, edit and delete connections** can no longer change a connection's
