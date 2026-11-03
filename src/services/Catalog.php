@@ -13,6 +13,7 @@ use craft\helpers\StringHelper;
 use DateTime;
 use justinholtweb\erpy\base\ApplyResult;
 use justinholtweb\erpy\db\Table;
+use justinholtweb\erpy\events\ApplyStockEvent;
 use justinholtweb\erpy\models\canonical\ErpPrice;
 use justinholtweb\erpy\models\canonical\ErpProduct;
 use justinholtweb\erpy\models\canonical\ErpStock;
@@ -32,6 +33,17 @@ use Throwable;
  */
 class Catalog extends Component
 {
+    /**
+     * @event ApplyStockEvent fired once per page of a stock pull, so a bulk writer can take it
+     */
+    public const EVENT_BEFORE_APPLY_STOCK = 'beforeApplyStock';
+
+    /** The ERP's number is what a customer can buy. The default, and 5.2's only behaviour. */
+    public const STOCK_AVAILABLE = 'available';
+
+    /** The ERP's number is the physical count; Commerce keeps its own committed units. */
+    public const STOCK_ON_HAND = 'onHand';
+
     /**
      * SKU → variant id, built once per run. A 40,000-SKU pull that looked each one up
      * individually would spend its whole night in the elements table.
@@ -474,6 +486,51 @@ class Catalog extends Component
     // Inventory
     // ---------------------------------------------------------------------------------------
 
+    /**
+     * Apply one page of a stock pull, offering it to a bulk writer first.
+     *
+     * @param array<int,ErpStock> $documents
+     * @return array<int,ApplyResult> keyed like `$documents`
+     */
+    public function applyStockBatch(Connection $connection, array $documents, FieldMap $map, bool $dryRun = false): array
+    {
+        $results = [];
+
+        if (!$dryRun && $documents !== [] && $this->hasEventHandlers(self::EVENT_BEFORE_APPLY_STOCK)) {
+            $event = new ApplyStockEvent([
+                'connection' => $connection,
+                'map' => $map,
+                'documents' => $documents,
+                'target' => $this->stockTarget($map),
+            ]);
+            $this->trigger(self::EVENT_BEFORE_APPLY_STOCK, $event);
+
+            foreach ($event->results as $key => $result) {
+                if (!isset($documents[$key]) || !$result instanceof ApplyResult) {
+                    continue;
+                }
+
+                $results[$key] = $result;
+
+                if ($result->changedAnything() && $result->localId) {
+                    $this->recordStockLink($connection, $documents[$key], $result->localId);
+                }
+            }
+        }
+
+        foreach ($documents as $key => $document) {
+            if (!isset($results[$key])) {
+                try {
+                    $results[$key] = $this->applyStock($connection, $document, $map, $dryRun);
+                } catch (Throwable $e) {
+                    $results[$key] = ApplyResult::failed($e->getMessage());
+                }
+            }
+        }
+
+        return $results;
+    }
+
     public function applyStock(Connection $connection, ErpStock $document, FieldMap $map, bool $dryRun = false): ApplyResult
     {
         $variant = $this->findVariantBySku($connection, $document->sku);
@@ -486,15 +543,17 @@ class Catalog extends Component
             return ApplyResult::skipped(Craft::t('erpy', 'Inventory is not tracked for this variant.'), $variant->id);
         }
 
-        $quantity = (int)floor($document->sellable() - (float)$map->option('stockBuffer', 0));
-        $quantity = max(0, $quantity);
+        $quantity = $this->stockQuantity($document, $map);
+        $target = $this->stockTarget($map);
 
         if ($dryRun) {
-            return ApplyResult::skipped(Craft::t('erpy', 'Would set stock to {qty}.', ['qty' => $quantity]));
+            return ApplyResult::skipped($target === self::STOCK_ON_HAND
+                ? Craft::t('erpy', 'Would set on-hand stock to {qty}.', ['qty' => $quantity])
+                : Craft::t('erpy', 'Would set stock to {qty}.', ['qty' => $quantity]));
         }
 
         $location = $this->resolveInventoryLocation($document, $map);
-        $current = $this->currentStock($variant, $location?->id);
+        $current = $this->currentStock($variant, $location?->id, $target);
 
         if ($current === $quantity) {
             return ApplyResult::skipped(Craft::t('erpy', 'Unchanged.'), $variant->id);
@@ -507,22 +566,54 @@ class Catalog extends Component
                 $attributes['inventoryLocationId'] = $location->id;
             }
 
+            // On-hand is Commerce's own SET of the whole physical count: it books the difference
+            // to available, so units committed to unshipped orders stay committed.
+            if ($target === self::STOCK_ON_HAND) {
+                $attributes['type'] = 'onHand';
+            }
+
             Commerce::getInstance()->getInventory()->updatePurchasableInventoryLevel($variant, $quantity, $attributes);
         } catch (Throwable $e) {
             return ApplyResult::failed($e->getMessage());
         }
 
+        $this->recordStockLink($connection, $document, $variant->id);
+
+        return ApplyResult::updated($variant->id, ['stock' => [$current, $quantity]]);
+    }
+
+    /**
+     * The quantity a stock document sets, after the merchant's hold-back.
+     *
+     * Set as *available*, that is the ERP's sellable figure. Set as *on hand*, it is the ERP's
+     * physical count — which already includes the units Commerce has committed to orders that
+     * have not shipped, so writing it as available would let those units be sold twice
+     * (GitHub #8). The ERP's own `allocated` is its reservations, not Commerce's, so it is not
+     * subtracted from on-hand.
+     */
+    public function stockQuantity(ErpStock $document, FieldMap $map): int
+    {
+        $figure = $this->stockTarget($map) === self::STOCK_ON_HAND ? max(0.0, $document->onHand) : $document->sellable();
+
+        return max(0, (int)floor($figure - (float)$map->option('stockBuffer', 0)));
+    }
+
+    public function stockTarget(FieldMap $map): string
+    {
+        return $map->option('stockTarget') === self::STOCK_ON_HAND ? self::STOCK_ON_HAND : self::STOCK_AVAILABLE;
+    }
+
+    private function recordStockLink(Connection $connection, ErpStock $document, int $variantId): void
+    {
         Plugin::getInstance()->getLinks()->record(
             connection: $connection,
             entity: \justinholtweb\erpy\base\Entity::INVENTORY,
             naturalKey: $document->naturalKey(),
-            localId: $variant->id,
+            localId: $variantId,
             remoteId: $document->remoteId,
             contentHash: $document->contentHash(),
             pulledAt: new DateTime(),
         );
-
-        return ApplyResult::updated($variant->id, ['stock' => [$current, $quantity]]);
     }
 
     private function resolveInventoryLocation(ErpStock $document, FieldMap $map): ?object
@@ -545,14 +636,14 @@ class Catalog extends Component
         return $locations->getInventoryLocationByHandle((string)$handle);
     }
 
-    private function currentStock(Variant $variant, ?int $locationId): ?int
+    private function currentStock(Variant $variant, ?int $locationId, string $target = self::STOCK_AVAILABLE): ?int
     {
         try {
             $levels = Commerce::getInstance()->getInventory()->getInventoryLevelsForPurchasable($variant);
 
             foreach ($levels as $level) {
                 if ($locationId === null || (int)$level->inventoryLocationId === $locationId) {
-                    return (int)$level->availableTotal;
+                    return (int)($target === self::STOCK_ON_HAND ? $level->onHandTotal : $level->availableTotal);
                 }
             }
         } catch (Throwable) {

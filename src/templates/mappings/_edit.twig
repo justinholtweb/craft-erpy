@@ -112,6 +112,17 @@
     {% elseif entity == 'inventory' %}
         <h2>{{ 'Inventory'|t('erpy') }}</h2>
 
+        {{ forms.selectField({
+            label: 'The ERP’s quantity sets'|t('erpy'),
+            instructions: 'Choose **On hand** when the ERP owns stock and reports what is physically in the warehouse. Commerce then keeps the units it has committed to unshipped orders, so they cannot be sold twice. **Available** writes the ERP’s sellable figure straight into Commerce’s available stock.'|t('erpy'),
+            name: 'options[stockTarget]',
+            options: [
+                { label: 'Available'|t('erpy'), value: 'available' },
+                { label: 'On hand'|t('erpy'), value: 'onHand' },
+            ],
+            value: map.option('stockTarget', 'available')
+        }) }}
+
         {{ forms.textField({
             label: 'Hold back'|t('erpy'),
             instructions: 'Units to subtract from every quantity before it reaches Commerce — a safety buffer against overselling.'|t('erpy'),

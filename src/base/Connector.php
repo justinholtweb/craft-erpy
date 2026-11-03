@@ -71,6 +71,29 @@ abstract class Connector implements ConnectorInterface
         return [];
     }
 
+    /**
+     * Settings that belong to one entity rather than to the connection — which file holds the
+     * stock list, say, or an ERP view name per entity. Same vocabulary as `settingsFields()`.
+     * They are rendered beside the entity on the connection screen and reach the connector as
+     * `FetchCriteria::$filters`.
+     */
+    public static function entityFields(string $entity): array
+    {
+        return [];
+    }
+
+    /**
+     * Whether the ERP collects this connection's documents itself rather than having them sent.
+     *
+     * A connector that answers true is never handed an order at checkout or by the "push
+     * undelivered" sweep: its documents still go through `Push::deliver()`, but only when the ERP
+     * comes and asks for them.
+     */
+    public function deliversOnRequest(string $entity): bool
+    {
+        return false;
+    }
+
     public function setConnection(Connection $connection): void
     {
         $this->connection = $connection;

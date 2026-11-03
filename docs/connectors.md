@@ -30,8 +30,13 @@ them, and the vendor's own traps. The add-ons have no documentation of their own
 
 One package may register several connectors — Sage registers four, MYOB two.
 
-A **Mock ERP** connector ships with Erpy itself, makes no network calls, and invents deterministic
-data. See [Installation](../installation).
+Two connectors ship with Erpy itself:
+
+- **[File / URL exchange](../files)**, for an ERP that has no API but exchanges files. It reads CSV,
+  XML or JSON from a folder, a URL, SFTP or an upload. It writes orders as files, or serves them at
+  a URL the ERP fetches.
+- **Mock ERP**, which makes no network calls and invents deterministic data. See
+  [Installation](../installation).
 
 ## Why the add-ons are free
 
@@ -126,11 +131,77 @@ Erpy provides the auth strategies most ERPs need — API key, HTTP basic, sessio
 two-legged, OAuth 2 client credentials and authorization code — so a connector picks one rather
 than writing a token refresh.
 
+### Settings per entity
+
+`settingsFields()` describes the connection. When something belongs to one entity, such as which
+file holds the stock list or which ERP view to read customers from, declare it in
+`entityFields()`. Erpy renders it under that entity's row on the connection screen, and the
+connector reads it from `$criteria->filters`:
+
+```php
+public static function entityFields(string $entity): array
+{
+    return [Field::text('view', 'ERP view', ['placeholder' => 'WebItems'])];
+}
+
+protected function fetchProducts(FetchCriteria $criteria): Page
+{
+    $view = $criteria->filters['view'] ?? 'Items';
+    // …
+}
+```
+
+A field can carry `'when' => ['someSetting' => ['a', 'b']]` to appear only for those values of a
+connection setting.
+
+### A record you cannot read
+
+When the ERP returns something that can't become a document, such as a malformed row or a record
+with the wrong shape, don't throw and don't drop it silently. Report it on the page:
+
+```php
+$page->reject($bestGuessAtTheNaturalKey, 'Row 57 has 4 columns; the header has 6.', $raw);
+```
+
+Erpy records it as a failed item and a dead letter, and the rest of the page is still applied. A
+later sync that brings the same key back successfully clears the dead letter.
+
+### An ERP that collects documents itself
+
+Some ERPs don't take orders. They come and fetch them. A connector answering `true` from
+`deliversOnRequest(Entity::ORDER)` is never handed an order at checkout, by a retry or by the
+console. Its orders are still delivered through `Push::deliver()`, but only on the export trigger.
+The File / URL exchange connector's export URL works this way.
+
 ### The transport redacts secrets
 
 An ERP will echo your credential back inside its own error message. Erpy's transport strips
 secrets out of non-2xx bodies before a connector — or a merchant's health screen — ever sees them.
 Success bodies are left alone, because connectors have to parse them.
+
+Logged bodies get more. Fields with credential names, such as `access_token`, `refresh_token`,
+`SessionId`, `apiKey` and `password`, are masked in JSON, form and XML bodies, so a login response
+never reaches the log with its token. Any value your auth strategy puts on a request is also
+redacted wherever the ERP echoes it back. A credential your connector handles itself, outside an
+auth strategy, can be registered with `$this->transport()->addSecretValue($token)`.
+
+### The transport does not repeat a POST
+
+`GET`, `PUT` and `DELETE` are retried on a timeout, a 408, a 429 or a 5xx. `POST` and `PATCH` are
+retried only when the ERP provably didn't act on them: the connection never opened, or the answer
+was 425 or 429. A `POST` that times out after it was written, or that a proxy answers 502 or 504,
+may already have created the order, so it comes back to your connector as a failure. Return a
+retryable `PushResult` and the queue tries again later, after the duplicate check in your
+`pushOrder()` has looked for the order.
+
+If your ERP de-duplicates on its own, opt the request in:
+
+```php
+$this->transport()->post('salesorders', $payload, ['retry' => true]);
+$this->transport()->post('salesorders', $payload, ['headers' => ['Idempotency-Key' => $document->reference]]);
+```
+
+`'retry' => false` turns retrying off for any request.
 
 ## When the connector's field name is wrong
 

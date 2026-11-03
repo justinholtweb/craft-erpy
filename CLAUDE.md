@@ -70,6 +70,20 @@ an id that no longer resolves.
   the stored key to any host.
 - Webhooks: POST only, secret in `X-Erpy-Secret`, never the query string.
 
+### The file / URL exchange connector (5.3.0)
+
+`connectors\FileConnector`, built in like the Mock, with its plumbing in `src/files/`. Sources
+(`LocalSource`, `HttpSource` over `Transport`, `SftpSource` over phpseclib, the upload inbox) are a
+`FileSource`, not HTTP in disguise. Readers (`CsvReader`, `XmlRecordReader`, `JsonRecordReader`)
+yield rows; the first page fills a `Spool` (UTF-8 JSONL in runtime) and the cursor is a byte
+offset into it, so a big file is parsed once. `RowMapper` guesses canonical fields from column
+names; the overlay is the real mapping. Per-file settings are `entityFields()` → `sync[entity][filters]`.
+Serving orders keeps invariant 2: `ExportController` calls `Push::order()` with
+`Run::TRIGGER_EXPORT` inside `FileConnector::collect()`, and the connector hands the document back
+instead of sending it. `Push::deliver()` refuses any other trigger for a connector whose
+`deliversOnRequest()` is true, and `queueOrder()` skips it. Location fields are endpoints
+(admin-only); per-entity file names are cleaned so they cannot leave the base folder.
+
 ### Delta watermarks
 
 The watermark advances to the **start** of a run, never to the end, plus a two-minute overlap. A
@@ -161,6 +175,12 @@ The stall alert is what would tell a merchant that.
 - **A curly quote straight after an interpolated variable eats it**: `"“$handle”"` interpolates
   `$handle”`, an undefined variable — which turned the webhook's 403 into a 500. Fourteen of them
   shipped. Always brace: `{$handle}`. phpstan catches it.
+- **Craft reserves the `token` query parameter** for its own tokenised routes and answers 400 for
+  any value it does not recognise, before a controller runs. A URL token is `?key=`.
+- **SFTP `rename` will not replace an existing file.** Use `posix_rename` (OpenSSH), and delete
+  first only as a fallback, or every second write of the same file fails with a bare "Failure".
+- **`XMLReader::expand()` on a truncated record raises a warning**, which Craft turns into an
+  exception without the line number. Suppress it and read `libxml_get_errors()`.
 
 Vendor-specific traps live in each connector's class docblock, where somebody debugging that ERP
 will actually find them: NetSuite's three spellings of an account id, SAP B1's `tNO` string
@@ -176,8 +196,11 @@ No local PHP on this Mac. Everything runs inside the plugin-testing container:
 
 ```sh
 cd ~/Sites/plugin-testing
-ddev exec php /var/www/craft-erpy/tests/integration/checks.php      # 144 engine checks
-ddev exec php /var/www/craft-erpy/tests/integration/connectors.php  # 306 conformance checks
+ddev exec php /var/www/craft-erpy/tests/integration/checks.php      # 159 engine checks
+ddev exec php /var/www/craft-erpy/tests/integration/connectors.php  # 324 conformance checks
+docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-erpy/tests/integration/files.php     # 70: file connector — every encoding/format, engine runs, write + serve over HTTP, upload
+# …plus 6 live SFTP checks: docker run -d --rm --name erpy-sftp-test --network ddev-plugin-testing_default atmoz/sftp erpy:pass123:1001:1001:export
+#    then add `-e ERPY_SFTP_HOST=erpy-sftp-test` to the files.php line
 docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-erpy/tests/integration/security.php  # 12: encryption at rest, repoint guard over HTTP, webhook
 docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-erpy/tests/integration/alerts.php    # failure alerts: latch, mail, SSRF, webhook, widget, test action over HTTP
 docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-erpy/tests/integration/replay.php    # 9: dead-letter retry never double-books (MockHandler ERP, POSTs counted per endpoint)

@@ -26,6 +26,9 @@ class Run extends Model
     public const TRIGGER_CONSOLE = 'console';
     public const TRIGGER_EVENT = 'event';
 
+    /** The ERP fetched documents from an export URL. */
+    public const TRIGGER_EXPORT = 'export';
+
     public ?int $id = null;
     public ?int $connectionId = null;
     public string $entity = '';

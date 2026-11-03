@@ -112,6 +112,25 @@ abstract class Field
     }
 
     /**
+     * A file the merchant uploads from the connection screen, kept in that connection's inbox
+     * under Craft's storage folder. Only meaningful in `entityFields()`, where it is uploaded for
+     * that one entity; it stores nothing in the connection's settings.
+     */
+    public static function upload(string $name, string $label, array $config = []): array
+    {
+        return array_merge([
+            'type' => 'upload',
+            'name' => $name,
+            'label' => $label,
+            'instructions' => '',
+            'required' => false,
+            'secret' => false,
+            'suggestEnvVars' => false,
+            'accept' => '.csv,.tsv,.txt,.xml,.json',
+        ], $config);
+    }
+
+    /**
      * A heading with optional prose, for breaking a long credential list into the sections the
      * ERP's own documentation uses.
      */
@@ -187,7 +206,7 @@ abstract class Field
         foreach ($fields as $field) {
             $name = $field['name'] ?? '';
 
-            if ($name === '' || ($field['type'] ?? '') === 'copyable') {
+            if ($name === '' || in_array($field['type'] ?? '', ['copyable', 'upload'], true)) {
                 continue;
             }
 

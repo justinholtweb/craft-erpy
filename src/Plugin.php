@@ -360,6 +360,7 @@ class Plugin extends BasePlugin
                 // to register a redirect URI containing a control panel trigger they cannot see.
                 $event->rules['erpy/oauth/callback'] = 'erpy/oauth/callback';
                 $event->rules['erpy/webhook/<connectionHandle:[\w\-]+>'] = 'erpy/webhook/receive';
+                $event->rules['erpy/export/<connectionHandle:[\w\-]+>/orders'] = 'erpy/export/orders';
             },
         );
     }

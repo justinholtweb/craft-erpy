@@ -563,8 +563,10 @@ try {
         $recorder = new Recorder(xml: str_contains($handle, 'intacct'));
 
         // The mock ERP invents its data in memory and never makes a request, so the checks below
-        // that inspect a request do not apply to it.
-        $makesRequests = Field::secretNames($fields) !== [];
+        // that inspect a request do not apply to it. Nor does the file connector: its "ERP" is a
+        // folder, a URL or an SFTP server chosen per connection, and `files.php` drives it
+        // against fixture files in every format and encoding instead of a recorded HTTP double.
+        $makesRequests = Field::secretNames($fields) !== [] && $handle !== 'file';
 
         check('binds to a connection and builds a transport', function() use ($class, $connection, $recorder) {
             /** @var ConnectorInterface&Connector $connector */

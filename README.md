@@ -69,6 +69,11 @@ Install the free add-on for your ERP and it appears in the connector list.
 | Unit4 ERP | `justinholtweb/craft-erpy-unit4` |
 | Priority | `justinholtweb/craft-erpy-priority` |
 
+**File / URL exchange** ships with Erpy too, for the many ERPs that have no API but exchange files.
+It reads CSV, XML or JSON from a folder, a URL, SFTP or an upload, in UTF-8, Windows-1250 or
+ISO-8859-2. It writes orders as files, or serves them at a tokened URL the ERP fetches. The identity
+map, delta watermarks, dead letters and mapping overlay apply to it like any other connector.
+
 A **Mock ERP** connector ships with Erpy itself. It invents deterministic data and makes no network
 calls, so you can try the mapping and sync screens before buying an ERP licence — and support can
 use it to prove a problem is in the connector rather than in Erpy.

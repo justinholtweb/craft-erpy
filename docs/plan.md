@@ -82,9 +82,19 @@ Worth keeping, because they are the ones that would otherwise have shipped:
 
 - GitHub repos and tags for thirteen packages; Packagist; Plugin Store submissions.
 - Verification against real tenants, per connector.
-- The file / URL exchange connector — 5.2.0, below.
+- ~~The file / URL exchange connector~~ — shipped in 5.3.0 (below, and `docs/files.md`).
 
-## 5.2.0 — the file / URL exchange connector (GitHub #3)
+## 5.3.0 — the file / URL exchange connector (GitHub #3, #7)
+
+**Shipped in 5.3.0** (slipped from 5.1.0 and then 5.2.0, which went to failure alerts). Differences
+from the plan below: JSON is read as well; a served order goes through `Push::deliver()` (the
+connector collects instead of sending) rather than a separate recording path; the token travels as
+a header or basic-auth password, and in the URL only as `?key=` and only when allowed — Craft
+reserves `?token=`; orders placed before the connection existed are never served unasked. Not
+built: XLSX, FTP/FTPS, a batch-per-run order file. The requester (wmdhosting) offered their own
+Craft-free reader core (XLSX via OpenSpout, FTP via curl) — worth looking at for those.
+
+### The original plan
 
 Decided 2026-09-26: build this after the 5.1.0 fix release, as 5.2.0, and **require**
 `phpseclib/phpseclib` ^3 for SFTP rather than making it optional.

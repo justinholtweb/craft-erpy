@@ -82,7 +82,9 @@ class OAuth2ClientCredentials extends BaseAuth
             $params['scope'] = $scope;
         }
 
-        $options = ['form' => $params];
+        // Minting a client-credentials token changes nothing on the ERP's side, so this is the one
+        // POST worth repeating when the identity provider has a bad moment.
+        $options = ['form' => $params, 'retry' => true];
 
         if ($this->sendCredentialsInBody) {
             $options['form']['client_id'] = (string)$this->setting($this->clientIdField);

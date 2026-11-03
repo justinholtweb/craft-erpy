@@ -21,8 +21,10 @@ separately for connectors would also mean a merchant on an unusual ERP paying mo
 
 ## My ERP is not on the list.
 
-A connector is one class, and the interface is documented in [Connectors](../connectors). If you
-would rather not write it, email me — the list grows in the order people ask.
+If it can export a file and import one, or fetch a URL, use the built-in
+[File / URL exchange](../files) connector. Otherwise a connector is one class, and the interface is
+documented in [Connectors](../connectors). If you would rather not write it, email me. The list
+grows in the order people ask.
 
 ## Can I try it without ERP credentials?
 

@@ -1,5 +1,52 @@
 # Release Notes for Erpy
 
+## 5.3.0 - 2026-11-03
+### Added
+
+- **File / URL exchange**, a connector built into Erpy for an ERP that exchanges files instead of
+  offering an API. It reads products, prices, stock, customers, order statuses and shipments from
+  CSV, XML or JSON. The files can be in a folder on the server, at a URL, on an SFTP server, or
+  uploaded on the connection screen. It reads UTF-8, Windows-1250, ISO-8859-2 and the other common
+  single-byte encodings, plus UTF-16. Orders are either written as one file per order, atomically,
+  to a folder or SFTP, or served at `erpy/export/<handle>/orders` for the ERP to fetch. A served
+  order is recorded as delivered, so it isn't served twice, and `?from=…&to=…` serves a range
+  again. The identity map, delta watermarks, dead letters, the run log and the mapping overlay
+  all apply. A malformed row becomes one entry on the Problems screen rather than a failed run.
+  See [File / URL exchange](https://justinholt.com/plugins/craft-erpy/docs/files). (#3, #7)
+- SFTP needs `phpseclib/phpseclib` ^3.0, which Erpy now requires. Erpy won't log in to an SFTP
+  server whose host key fingerprint hasn't been saved.
+- A `decimal:,` mapping transform reads `1.234,56` and `12,5` as numbers.
+- For connector authors: `Connector::entityFields()` for settings that belong to one entity,
+  `Page::reject()` for a record a connector can't read, `Connector::deliversOnRequest()` for an ERP
+  that collects documents itself, `Field::upload()`, and `Run::TRIGGER_EXPORT`.
+
+- An inventory mapping can now set Commerce's **on-hand** stock instead of its available stock
+  (**The ERP's quantity sets → On hand**). Use it when the ERP owns stock and reports its physical
+  count: Commerce books the difference to available and keeps the units committed to unshipped
+  orders, so those units cannot be sold twice. **Available** is still the default. (#8)
+- `Catalog::EVENT_BEFORE_APPLY_STOCK`. It receives each page of a stock pull before any of it is
+  written, so a site with a bulk inventory writer can take the page. Erpy writes whatever the
+  handler leaves, and records every document in the run log, the identity map and the Problems
+  screen whoever wrote it. (#8)
+- `Transport::addSecretValue()`, plus the `'retry'` request option and `Idempotency-Key` support
+  described below.
+
+### Fixed
+
+- The transport could post the same order to an ERP up to four times. A `POST` or `PATCH` that
+  timed out, or got a 502/503/504 from a proxy, was sent again automatically, even though the
+  ERP may already have booked it. The identity map and the 5.2.0 retry guard couldn't see those
+  copies, because they all happened inside one request. `POST` and `PATCH` are now only repeated
+  when the ERP provably didn't act on them: the connection never opened, or the ERP answered
+  425/429. A connector can opt a request back in with `'retry' => true` or an `Idempotency-Key`
+  header, and `'retry' => false` turns retrying off for any method. A document that fails this
+  way goes to the queue's retry, which checks the ERP for it before sending again. (#5)
+- Tokens an ERP issued at login were written to the request log. That covered `access_token` and
+  `refresh_token` from an OAuth exchange, a `SessionId`, an `apiKey` and an XML `<sessionid>`.
+  Redaction only knew the secrets the merchant had typed in. Logged bodies now have
+  credential-named fields masked, in JSON, form and XML, on success and failure. Any value an
+  auth strategy puts on a request is also redacted wherever the ERP echoes it back. (#6)
+
 ## 5.2.0 - 2026-10-09
 ### Added
 

@@ -48,6 +48,7 @@ use justinholtweb\erpy\models\canonical\ErpStock;
 use justinholtweb\erpy\models\Connection;
 use justinholtweb\erpy\models\FieldMap;
 use justinholtweb\erpy\models\Run;
+use justinholtweb\erpy\models\RunItem;
 use justinholtweb\erpy\Plugin;
 
 $passed = 0;
@@ -525,6 +526,110 @@ try {
 
         return ($attempts === 2 && $response->errorMessage() === 'Network: could not resolve host')
             ?: "attempts $attempts, message " . $response->errorMessage();
+    });
+
+    // GitHub #5: a POST that the ERP may have booked is never sent a second time by the
+    // transport. Each check counts what reached the "ERP".
+    $countingPost = function(callable $answer, array $options = [], string $method = 'POST'): int {
+        $attempts = 0;
+        $transport = (new Transport())
+            ->setMaxAttempts(4)
+            ->setDouble(function() use (&$attempts, $answer) {
+                $attempts++;
+
+                return $answer($attempts);
+            });
+
+        $transport->request($method, 'https://example.test/orders', $options + ['json' => ['ref' => 'R1']]);
+
+        return $attempts;
+    };
+
+    check('a POST answered 504 by a proxy is sent once — the ERP may have booked it', function() use ($countingPost) {
+        $attempts = $countingPost(fn() => new Response(504));
+
+        return $attempts === 1 ?: "the order was POSTed $attempts times";
+    });
+
+    check('a POST that timed out after it was written is sent once', function() use ($countingPost) {
+        $attempts = $countingPost(fn() => new Response(0, [], '', 'Network: Operation timed out'));
+
+        return $attempts === 1 ?: "the order was POSTed $attempts times";
+    });
+
+    check('a PATCH answered 500 is sent once', function() use ($countingPost) {
+        $attempts = $countingPost(fn() => new Response(500), [], 'PATCH');
+
+        return $attempts === 1 ?: "the PATCH was sent $attempts times";
+    });
+
+    check('a POST that never left Erpy is retried', function() use ($countingPost) {
+        $attempts = $countingPost(function(int $n) {
+            if ($n === 1) {
+                $response = new Response(0, [], '', 'Network: could not resolve host');
+                $response->sent = false;
+
+                return $response;
+            }
+
+            return Response::json(201, ['id' => 1]);
+        });
+
+        return $attempts === 2 ?: "made $attempts attempts";
+    });
+
+    check('a POST throttled with 429 is retried — the ERP did not act on it', function() use ($countingPost) {
+        $attempts = $countingPost(fn(int $n) => $n === 1 ? new Response(429) : Response::json(201, []));
+
+        return $attempts === 2 ?: "made $attempts attempts";
+    });
+
+    check('a POST the connector marks retryable is retried on a 503', function() use ($countingPost) {
+        $attempts = $countingPost(fn(int $n) => $n < 3 ? new Response(503) : Response::json(201, []), ['retry' => true]);
+
+        return $attempts === 3 ?: "made $attempts attempts";
+    });
+
+    check('a POST carrying an Idempotency-Key is retried', function() use ($countingPost) {
+        $attempts = $countingPost(
+            fn(int $n) => $n === 1 ? new Response(502) : Response::json(201, []),
+            ['headers' => ['Idempotency-Key' => 'order-R1']],
+        );
+
+        return $attempts === 2 ?: "made $attempts attempts";
+    });
+
+    check('`retry => false` stops even a GET being repeated', function() use ($countingPost) {
+        $attempts = $countingPost(fn() => new Response(503), ['retry' => false], 'GET');
+
+        return $attempts === 1 ?: "made $attempts attempts";
+    });
+
+    check('only curl failures before the request was written count as unsent', function() {
+        $unsent = new ReflectionMethod(Transport::class, 'provablyUnsent');
+        $unsent->setAccessible(true);
+        $request = new GuzzleHttp\Psr7\Request('POST', 'https://example.test/orders');
+        $transport = new Transport();
+
+        $cases = [
+            'refused connection' => [['errno' => 7], true],
+            'unresolvable host' => [['errno' => 6], true],
+            'TLS handshake' => [['errno' => 35], true],
+            'timeout while connecting' => [['errno' => 28, 'pretransfer_time' => 0.0], true],
+            'timeout waiting for the answer' => [['errno' => 28, 'pretransfer_time' => 0.04], false],
+            'timeout, timings unknown' => [['errno' => 28], false],
+            'empty reply' => [['errno' => 52, 'pretransfer_time' => 0.04], false],
+        ];
+
+        foreach ($cases as $label => [$context, $expected]) {
+            $e = new GuzzleHttp\Exception\ConnectException('cURL error', $request, null, $context);
+
+            if ($unsent->invoke($transport, $e) !== $expected) {
+                return "$label was classed as " . ($expected ? 'sent' : 'unsent');
+            }
+        }
+
+        return true;
     });
 
     check('a 401 gets exactly one reauthentication, then gives up', function() {
@@ -1419,6 +1524,106 @@ try {
         return str_contains((string)$result->message, '15') ?: (string)$result->message;
     });
 
+    // GitHub #8: an ERP that owns stock reports its physical count. Written as available, the
+    // units Commerce has committed to unshipped orders become sellable a second time.
+    check('on-hand mode sets the physical count, not the ERP’s sellable figure', function() use ($plugin, $connection, $suffix) {
+        $map = saveMap($connection, Entity::INVENTORY, Direction::PULL, ['stockTarget' => 'onHand', 'stockBuffer' => 2]);
+        $document = new ErpStock(['sku' => "ERPY$suffix-0002", 'onHand' => 20, 'allocated' => 5, 'available' => 12]);
+
+        $quantity = $plugin->getCatalog()->stockQuantity($document, $map);
+        $result = $plugin->getCatalog()->applyStock($connection, $document, $map, dryRun: true);
+
+        saveMap($connection, Entity::INVENTORY, Direction::PULL, []);
+
+        return ($quantity === 18 && str_contains((string)$result->message, 'on-hand') && str_contains((string)$result->message, '18'))
+            ?: "quantity $quantity, “{$result->message}”";
+    });
+
+    check('on-hand mode leaves Commerce’s committed units committed', function() use ($plugin, $connection, $suffix) {
+        $variant = $plugin->getCatalog()->findVariantBySku($connection, "ERPY$suffix-0003");
+
+        if (!$variant || !$variant->inventoryTracked) {
+            return 'no tracked fixture variant';
+        }
+
+        $inventory = Commerce::getInstance()->getInventory();
+        $level = $inventory->getInventoryLevelsForPurchasable($variant)->first();
+
+        // Three units on an order that has not shipped, the way Commerce books a completed order.
+        Craft::$app->getDb()->createCommand()->insert('{{%commerce_inventorytransactions}}', [
+            'inventoryItemId' => $level->inventoryItemId,
+            'inventoryLocationId' => $level->inventoryLocationId,
+            'quantity' => 3,
+            'type' => 'committed',
+            'note' => 'Erpy check: an unshipped order',
+            'movementHash' => craft\helpers\StringHelper::randomString(32),
+            'dateCreated' => craft\helpers\Db::prepareDateForDb(new DateTime()),
+        ])->execute();
+
+        $map = saveMap($connection, Entity::INVENTORY, Direction::PULL, ['stockTarget' => 'onHand']);
+        $result = $plugin->getCatalog()->applyStock($connection, new ErpStock(['sku' => "ERPY$suffix-0003", 'onHand' => 20]), $map);
+        $again = $plugin->getCatalog()->applyStock($connection, new ErpStock(['sku' => "ERPY$suffix-0003", 'onHand' => 20]), $map);
+        saveMap($connection, Entity::INVENTORY, Direction::PULL, []);
+
+        $level = $inventory->getInventoryLevelsForPurchasable($variant)->first();
+
+        if ($result->isFailure()) {
+            return 'the write failed: ' . $result->message;
+        }
+
+        if ((int)$level->onHandTotal !== 20 || (int)$level->committedTotal !== 3 || (int)$level->availableTotal !== 17) {
+            return "on hand {$level->onHandTotal}, committed {$level->committedTotal}, available {$level->availableTotal}";
+        }
+
+        // The unchanged check compares like with like, so the second pull writes nothing.
+        return $again->message === Craft::t('erpy', 'Unchanged.') ?: 'a repeated count was written again: ' . $again->message;
+    });
+
+    check('a bulk writer gets each stock page once and Erpy writes only what it left', function() use ($plugin, $connection) {
+        $pages = [];
+        $handler = function(\justinholtweb\erpy\events\ApplyStockEvent $event) use (&$pages, $plugin, $connection) {
+            $pages[] = count($event->documents);
+
+            foreach ($event->documents as $key => $document) {
+                $variant = $plugin->getCatalog()->findVariantBySku($connection, $document->sku);
+
+                if ($variant) {
+                    $event->results[$key] = new \justinholtweb\erpy\base\ApplyResult(
+                        action: RunItem::ACTION_UPDATED,
+                        localId: $variant->id,
+                        message: 'Written by the bulk writer.',
+                    );
+
+                    return;
+                }
+            }
+        };
+
+        craft\base\Event::on(justinholtweb\erpy\services\Catalog::class, justinholtweb\erpy\services\Catalog::EVENT_BEFORE_APPLY_STOCK, $handler);
+
+        try {
+            $run = $plugin->getSync()->run($connection, Entity::INVENTORY, ['full' => true, 'force' => true]);
+            $dry = count($pages);
+            $plugin->getSync()->run($connection, Entity::INVENTORY, ['full' => true, 'force' => true, 'dryRun' => true]);
+        } finally {
+            craft\base\Event::off(justinholtweb\erpy\services\Catalog::class, justinholtweb\erpy\services\Catalog::EVENT_BEFORE_APPLY_STOCK, $handler);
+        }
+
+        $items = $run->created + $run->updated + $run->skipped + $run->failed;
+        $bulk = (int)(new craft\db\Query())->from(Table::RUN_ITEMS)->where(['runId' => $run->id, 'message' => 'Written by the bulk writer.'])->count();
+
+        if ($pages === [] || max($pages) < 2) {
+            return 'the event was not given whole pages: ' . json_encode($pages);
+        }
+
+        if (count($pages) !== $dry) {
+            return 'the event fired on a dry run';
+        }
+
+        return ($bulk === count($pages) && $items === array_sum($pages) && $run->failed === 0)
+            ?: "pages " . json_encode($pages) . ", $items documents recorded, $bulk from the bulk writer, {$run->failed} failed";
+    });
+
     // -----------------------------------------------------------------------------------------
     section('Contract pricing');
 
@@ -1969,6 +2174,88 @@ try {
 
         return !str_contains((string)($row['requestHeaders'] ?? ''), 'abcdef123456')
             ?: 'the Authorization header was logged verbatim';
+    });
+
+    // GitHub #6: a token the ERP issues at login is not a configured secret, so value redaction
+    // alone let it into the log. Each body below is a login or token exchange, logged as is.
+    $lastRequestRow = function() use ($connection): array {
+        return (new craft\db\Query())
+            ->from(Table::LOG)
+            ->where(['connectionId' => $connection->id, 'type' => 'request'])
+            ->orderBy(['id' => SORT_DESC])
+            ->one() ?: [];
+    };
+
+    check('tokens issued in a login or token response never reach the log', function() use ($connection, $lastRequestRow) {
+        $answers = [
+            'OAuth token' => Response::json(200, ['access_token' => 'issued-access-111', 'refresh_token' => 'issued-refresh-222', 'expires_in' => 3600]),
+            'session login' => Response::json(200, ['SessionId' => 'issued-session-333', 'Version' => '1000']),
+            'API key login' => Response::json(200, ['data' => ['apiKey' => 'issued-apikey-444']]),
+            'XML session' => Response::xml(200, '<response><result><data><api><sessionid>issued-xml-555</sessionid></api></data></result></response>'),
+        ];
+
+        foreach ($answers as $label => $answer) {
+            (new Transport())
+                ->setConnection($connection)
+                ->setDouble(fn() => $answer)
+                ->request('POST', 'https://login.example.test/token', ['form' => ['grant_type' => 'refresh_token', 'refresh_token' => 'sent-refresh-666']]);
+
+            $row = $lastRequestRow();
+            $logged = ($row['requestBody'] ?? '') . ($row['responseBody'] ?? '');
+
+            if (preg_match('/issued-|sent-refresh/', $logged)) {
+                return "the $label was logged with its token: $logged";
+            }
+        }
+
+        return true;
+    });
+
+    check('a logged token response is still readable apart from the token', function() use ($connection, $lastRequestRow) {
+        (new Transport())
+            ->setConnection($connection)
+            ->setDouble(fn() => Response::json(200, ['access_token' => 'issued-access-777', 'expires_in' => 3600, 'nextPageToken' => 'page-2']))
+            ->post('https://login.example.test/token');
+
+        $body = (string)($lastRequestRow()['responseBody'] ?? '');
+
+        return (str_contains($body, '"expires_in":3600') && str_contains($body, 'page-2') && !str_contains($body, 'issued-access-777'))
+            ?: $body;
+    });
+
+    check('a token an auth strategy sends is redacted wherever the ERP echoes it', function() use ($connection, $lastRequestRow) {
+        $auth = new class extends \justinholtweb\erpy\auth\BaseAuth {
+            public function headers(): array
+            {
+                return ['Authorization' => 'Bearer issued-bearer-888'];
+            }
+
+            public function isConfigured(): bool
+            {
+                return true;
+            }
+        };
+
+        $transport = (new Transport())
+            ->setConnection($connection)
+            ->setAuth($auth)
+            ->setDouble(fn() => Response::json(200, ['note' => 'You are signed in with issued-bearer-888']));
+
+        $transport->get('https://example.test/me');
+        $logged = (string)($lastRequestRow()['responseBody'] ?? '');
+
+        $failure = (new Transport())
+            ->setConnection($connection)
+            ->setAuth($auth)
+            ->setDouble(fn() => Response::json(400, ['message' => 'Token issued-bearer-888 lacks scope']))
+            ->get('https://example.test/me');
+
+        if (str_contains($logged, 'issued-bearer-888')) {
+            return 'an echoed session token was logged: ' . $logged;
+        }
+
+        return !str_contains($failure->errorMessage(), 'issued-bearer-888')
+            ?: 'an echoed session token reached the connector in an error: ' . $failure->errorMessage();
     });
 
     check('pruning removes old entries and leaves recent ones', function() use ($plugin, $connection) {

@@ -89,7 +89,7 @@ class Push extends Component
         $results = [];
 
         foreach (Plugin::getInstance()->getConnections()->syncing(Entity::ORDER, Direction::PUSH) as $connection) {
-            if ($connection->getStoreId() !== $order->storeId) {
+            if ($connection->getStoreId() !== $order->storeId || $this->waitsToBeAsked($connection, Entity::ORDER)) {
                 continue;
             }
 
@@ -115,7 +115,7 @@ class Push extends Component
         $connections = Plugin::getInstance()->getConnections()->syncing(Entity::ORDER, Direction::PUSH);
 
         foreach ($connections as $connection) {
-            if ($connection->getStoreId() !== $order->storeId) {
+            if ($connection->getStoreId() !== $order->storeId || $this->waitsToBeAsked($connection, Entity::ORDER)) {
                 continue;
             }
 
@@ -213,6 +213,16 @@ class Push extends Component
             ]));
         }
 
+        // A connection the ERP collects from is delivered to only when the ERP asks. Sending it
+        // from anywhere else — a retry, the console, the queue — would mark the document as
+        // delivered without the ERP ever having seen it, and the next export would leave it out.
+        if ($trigger !== Run::TRIGGER_EXPORT && $this->waitsToBeAsked($connection, $entity)) {
+            return PushResult::rejected(Craft::t('erpy', '{connector} hands over {entity} when the ERP fetches them from the export URL, so they are not sent from here.', [
+                'connector' => $connector::displayName(),
+                'entity' => Entity::displayName($entity),
+            ]));
+        }
+
         $links = Plugin::getInstance()->getLinks();
         $key = $document->naturalKey();
         $link = $links->find($connection, $entity, $key);
@@ -258,6 +268,17 @@ class Push extends Component
         $this->recordOutcome($connection, $entity, $document, $localId, $result, $run, $durationMs);
 
         return $result;
+    }
+
+    /**
+     * Whether the ERP collects this entity from the connection itself (an export URL it polls),
+     * so nothing should be pushed to it.
+     */
+    public function waitsToBeAsked(Connection $connection, string $entity): bool
+    {
+        $connector = $connection->getConnector();
+
+        return $connector instanceof \justinholtweb\erpy\base\Connector && $connector->deliversOnRequest($entity);
     }
 
     private function recordOutcome(Connection $connection, string $entity, ErpDocument $document, ?int $localId, PushResult $result, Run $run, int $durationMs): void

@@ -6,6 +6,7 @@ use Craft;
 use craft\base\Component;
 use craft\events\RegisterComponentTypesEvent;
 use justinholtweb\erpy\base\ConnectorInterface;
+use justinholtweb\erpy\connectors\FileConnector;
 use justinholtweb\erpy\connectors\MockConnector;
 use justinholtweb\erpy\models\Connection;
 use Throwable;
@@ -49,6 +50,7 @@ class Connectors extends Component
         $event = new RegisterComponentTypesEvent([
             'types' => [
                 MockConnector::class,
+                FileConnector::class,
             ],
         ]);
 

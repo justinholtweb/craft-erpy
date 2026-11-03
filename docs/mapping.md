@@ -56,6 +56,7 @@ Chain them with `|`, and pass an argument after `:`.
 | `slug` | Slugify |
 | `striptags` | Strip HTML |
 | `int` `number` `abs` `round:2` | Numbers |
+| `decimal:,` | A number written with a decimal comma — `1.234,56`, `1 234,56`, `12,5`. `decimal:.` reads `1,234.56`. Anything that is not a number becomes empty rather than zero. |
 | `bool` `not` | Yes/no — and an ERP expresses "no" as an alarming number of things |
 | `prefix:` `suffix:` `truncate:255` | |
 | `replace:find:replace` | Find and replace |
@@ -74,6 +75,37 @@ will otherwise be written into Commerce as if they were data.
 Each entity's mapping screen carries its own switches — "create missing products", and so on.
 They live with the rules because they are the same kind of decision: what this connection should
 do with this entity, on this site.
+
+### Available or on hand
+
+An inventory mapping chooses what the ERP's quantity sets in Commerce.
+
+- **Available** (the default) writes the ERP's sellable figure into Commerce's available stock.
+  That is the ERP's own availability when it reports one, or on-hand minus allocated.
+- **On hand** writes the ERP's physical count as Commerce's on-hand stock. Commerce books the
+  difference to available and keeps the units it has committed to orders that haven't shipped.
+  Choose it when the ERP owns stock. With **Available**, those committed units would be counted
+  once in the ERP's figure and again in Commerce's commitments, so they could be sold twice.
+
+The **Hold back** buffer is subtracted in either mode.
+
+For tens of thousands of stock lines, a site can take each page of a stock pull through
+`Catalog::EVENT_BEFORE_APPLY_STOCK` and hand it to a bulk writer. Put an `ApplyResult` in
+`$event->results` for each document you write. Erpy writes the rest and logs all of them:
+
+```php
+use justinholtweb\erpy\events\ApplyStockEvent;
+use justinholtweb\erpy\services\Catalog;
+use yii\base\Event;
+
+Event::on(Catalog::class, Catalog::EVENT_BEFORE_APPLY_STOCK, function(ApplyStockEvent $event) {
+    foreach ($event->documents as $key => $stock) {
+        // $event->quantity($stock) is what Erpy would write; $event->target is 'available' or 'onHand'.
+        $event->results[$key] = MyBulkWriter::queue($stock->sku, $event->quantity($stock), $event->target);
+    }
+    MyBulkWriter::flush();
+});
+```
 
 ### A variant Erpy creates has to be told to track inventory
 

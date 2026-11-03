@@ -81,6 +81,10 @@ class ConnectionsController extends Controller
             'connector' => $connector ? $plugin->getConnectors()->describeOne($connection->connector) : null,
             'connectors' => $plugin->getConnectors()->describe(),
             'settingsFields' => $connector ? $connector::settingsFields() : [],
+            // Plain arrays, because a template cannot call a static method on a class name.
+            'entityFields' => $connector instanceof \justinholtweb\erpy\base\Connector
+                ? array_filter(array_combine(Entity::syncOrder(), array_map(static fn(string $entity) => $connector::entityFields($entity), Entity::syncOrder())))
+                : [],
             'capabilities' => $connector ? $connector::capabilities() : null,
             'entities' => Entity::syncOrder(),
             'lastRuns' => $lastRuns,
@@ -179,7 +183,10 @@ class ConnectionsController extends Controller
                 'enabled' => (bool)($config['enabled'] ?? false),
                 'direction' => (int)($config['direction'] ?? Direction::PULL),
                 'interval' => max(0, (int)($config['interval'] ?? 0)),
-                'filters' => (array)($config['filters'] ?? []),
+                'filters' => array_map(
+                    static fn($value) => is_scalar($value) ? trim((string)$value) : '',
+                    (array)($config['filters'] ?? []),
+                ),
             ];
         }
 

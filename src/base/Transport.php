@@ -3,6 +3,7 @@
 namespace justinholtweb\erpy\base;
 
 use Craft;
+use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Exception\TransferException;
 use justinholtweb\erpy\models\Connection;
@@ -21,6 +22,22 @@ class Transport
 {
     /** Statuses worth another attempt: throttling, and the server having a bad moment. */
     private const RETRY_STATUSES = [408, 425, 429, 500, 502, 503, 504];
+
+    /**
+     * Statuses that mean the ERP turned the request away before acting on it, so even a POST can
+     * be sent again. A 502 or a 504 means nothing of the sort: the proxy gave up, the ERP behind
+     * it may have finished booking the order.
+     */
+    private const REFUSED_STATUSES = [425, 429];
+
+    /** Methods that create something, where a second copy of the request is a second document. */
+    private const UNSAFE_METHODS = ['POST', 'PATCH'];
+
+    /**
+     * curl errors raised before a byte of the request was written: resolving the proxy or the
+     * host, connecting, the TLS handshake.
+     */
+    private const UNSENT_CURL_ERRORS = [5, 6, 7, 35];
 
     private ?Connection $connection = null;
 
@@ -120,6 +137,20 @@ class Transport
     }
 
     /**
+     * Redact one more value from here on — a token the ERP issued, say, rather than one the
+     * merchant typed in. Every value an auth strategy contributes to a request is added this way
+     * automatically, so a connector only needs this for a credential it handles itself.
+     */
+    public function addSecretValue(string $value): self
+    {
+        if (strlen($value) >= 6 && !in_array($value, $this->secretValues, true)) {
+            $this->secretValues[] = $value;
+        }
+
+        return $this;
+    }
+
+    /**
      * Answer requests from a callable instead of the network.
      *
      * The callable receives `(string $method, string $uri, array $options)` and returns a
@@ -208,7 +239,7 @@ class Transport
 
             $this->signalAuth($response);
 
-            if (!$this->shouldRetry($response, $attempt)) {
+            if (!$this->shouldRetry($response, $attempt, $method, $options)) {
                 return $response;
             }
 
@@ -301,13 +332,41 @@ class Transport
         }
 
         // A DNS failure or a timeout is not an HTTP status, but the engine only speaks statuses.
-        // 0 means "never reached the ERP", which retries and never dead-letters as a rejection.
-        return new Response(
+        // 0 means "no answer from the ERP", which retries and never dead-letters as a rejection.
+        // It does not mean the ERP never saw the request: a read timeout is a 0 too.
+        $response = new Response(
             status: 0,
             headers: [],
             body: '',
             error: ($e instanceof TransferException ? 'Network: ' : '') . $e->getMessage(),
         );
+        $response->sent = !$this->provablyUnsent($e);
+
+        return $response;
+    }
+
+    /**
+     * Whether curl gave up before writing the request. Guzzle files a read timeout and an empty
+     * reply under ConnectException alongside a refused connection, so the exception class cannot
+     * answer this; curl's error number and timings can.
+     */
+    private function provablyUnsent(Throwable $e): bool
+    {
+        if (!$e instanceof ConnectException && !$e instanceof RequestException) {
+            return false;
+        }
+
+        $context = $e->getHandlerContext();
+        $errno = (int)($context['errno'] ?? 0);
+
+        if (in_array($errno, self::UNSENT_CURL_ERRORS, true)) {
+            return true;
+        }
+
+        // A timeout that struck before the transfer began — still connecting, still shaking hands.
+        return $errno === 28
+            && array_key_exists('pretransfer_time', $context)
+            && (float)$context['pretransfer_time'] === 0.0;
     }
 
     private function applyAuth(array $options, string $method = 'GET', string $url = ''): array
@@ -325,6 +384,15 @@ class Transport
                 : $this->auth->headers();
 
             $headers = array_merge($authHeaders, $headers);
+
+            // Whatever the strategy puts on the wire is a credential, whether the merchant typed
+            // it or the ERP issued it at login. Learning it here means an ERP echoing its own
+            // session id back in a body is redacted like a configured password (GitHub #6).
+            foreach (array_merge(array_values($authHeaders), array_values($this->auth->query())) as $value) {
+                if (is_string($value)) {
+                    $this->addSecretValue((string)preg_replace('/^(Bearer|Basic|Token|OAuth)\s+/i', '', $value));
+                }
+            }
         }
 
         $options['headers'] = $headers;
@@ -336,13 +404,48 @@ class Transport
         return $options;
     }
 
-    private function shouldRetry(Response $response, int $attempt): bool
+    /**
+     * A GET, PUT or DELETE can be repeated without changing what the ERP holds; a POST or PATCH
+     * cannot. When a POST times out after the ERP booked the order, or a proxy answers 504 while
+     * the ERP is still writing it, sending it again books it again — inside one `request()` call,
+     * below anything the identity map or a dead-letter retry can see (GitHub #5).
+     *
+     * So an unsafe method is only repeated when the ERP provably did not act on it — the
+     * connection never opened, or it answered 425/429 — unless the connector says otherwise: the
+     * request option `'retry' => true` (an ERP that de-duplicates on its own), or an
+     * `Idempotency-Key` header. `'retry' => false` turns retrying off for any method.
+     */
+    private function shouldRetry(Response $response, int $attempt, string $method = 'GET', array $options = []): bool
     {
         if ($attempt >= $this->maxAttempts) {
             return false;
         }
 
-        return $response->status === 0 || in_array($response->status, self::RETRY_STATUSES, true);
+        if ($response->status !== 0 && !in_array($response->status, self::RETRY_STATUSES, true)) {
+            return false;
+        }
+
+        if (array_key_exists('retry', $options)) {
+            return (bool)$options['retry'];
+        }
+
+        if (!in_array($method, self::UNSAFE_METHODS, true) || $this->hasIdempotencyKey($options)) {
+            return true;
+        }
+
+        return ($response->status === 0 && !$response->sent)
+            || in_array($response->status, self::REFUSED_STATUSES, true);
+    }
+
+    private function hasIdempotencyKey(array $options): bool
+    {
+        foreach (array_keys($options['headers'] ?? []) as $name) {
+            if (strcasecmp((string)$name, 'Idempotency-Key') === 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -424,9 +527,9 @@ class Transport
                 method: $method,
                 url: $this->redact($url),
                 requestHeaders: $this->redactArray($options['headers'] ?? []),
-                requestBody: $this->redact($this->bodyToString($options)),
+                requestBody: $this->redactBody($this->redact($this->bodyToString($options))),
                 status: $response->status,
-                responseBody: $this->redact($response->body),
+                responseBody: $this->redactBody($this->redact($response->body)),
                 durationMs: $response->durationMs ?? 0,
                 error: $response->error,
                 attempt: $response->attempt ?? 1,
@@ -461,6 +564,93 @@ class Transport
         }
 
         return str_replace($this->secretValues, '••••••••', $value);
+    }
+
+    /**
+     * Mask credential-named fields in a body bound for the log.
+     *
+     * Value redaction cannot cover a login: the token in `{"access_token": "…"}` or
+     * `{"SessionId": "…"}` was issued by that very response, so no list of known values holds it
+     * yet. The field names are the same everywhere, so those are masked instead — in JSON, form
+     * and XML bodies alike, request and response, success or failure. Only the log copy is
+     * touched; the connector still parses the real body.
+     */
+    private function redactBody(string $body): string
+    {
+        $trimmed = ltrim($body);
+
+        if ($trimmed === '') {
+            return $body;
+        }
+
+        if ($trimmed[0] === '{' || $trimmed[0] === '[') {
+            $data = json_decode($body, true);
+
+            if (!is_array($data)) {
+                return $body;
+            }
+
+            $changed = false;
+            $masked = $this->maskSecretKeys($data, $changed);
+
+            return $changed ? (string)json_encode($masked, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : $body;
+        }
+
+        if ($trimmed[0] === '<') {
+            return (string)preg_replace_callback(
+                '/<((?:[\w.-]+:)?([\w.-]+))(\s[^>]*)?>([^<]+)<\/\1>/',
+                fn(array $m) => self::isSecretKey($m[2]) ? "<{$m[1]}{$m[3]}>••••••••</{$m[1]}>" : $m[0],
+                $body,
+            );
+        }
+
+        // A form body: key=value pairs, nothing else.
+        if (preg_match('/^[^\s=&]+=[^\s]*$/', $trimmed)) {
+            return (string)preg_replace_callback(
+                '/(^|&)([^=&]+)=([^&]+)/',
+                fn(array $m) => self::isSecretKey(urldecode($m[2])) ? $m[1] . $m[2] . '=' . urlencode('••••••••') : $m[0],
+                $body,
+            );
+        }
+
+        return $body;
+    }
+
+    private function maskSecretKeys(array $data, bool &$changed): array
+    {
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                $data[$key] = $this->maskSecretKeys($value, $changed);
+            } elseif (is_string($key) && self::isSecretKey($key) && is_scalar($value) && (string)$value !== '') {
+                $data[$key] = '••••••••';
+                $changed = true;
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * Credential-shaped field names, compared without case or separators so `access_token`,
+     * `accessToken` and `Access-Token` are one name. `token` alone is a credential, but
+     * `nextPageToken` is a cursor somebody debugging paging needs to read, so suffixes are
+     * matched only for the unambiguous names.
+     */
+    private static function isSecretKey(string $key): bool
+    {
+        $name = strtolower((string)preg_replace('/[^a-z0-9]/i', '', $key));
+
+        if (in_array($name, ['token', 'secret', 'password', 'passwd', 'pwd', 'assertion', 'sessionid', 'sessiontoken', 'privatekey'], true)) {
+            return true;
+        }
+
+        foreach (['accesstoken', 'refreshtoken', 'idtoken', 'authtoken', 'bearertoken', 'apitoken', 'apikey', 'secret', 'password', 'sessionid'] as $suffix) {
+            if (str_ends_with($name, $suffix)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function redactArray(array $values): array

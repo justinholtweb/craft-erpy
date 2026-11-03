@@ -12,6 +12,13 @@ class Response
 
     public ?int $attempt = null;
 
+    /**
+     * False only when the request provably never left Erpy — a DNS failure, a refused
+     * connection, a TLS handshake that never finished. A timeout after the request was written
+     * stays true: the ERP may well have booked it. This is what lets a POST be retried safely.
+     */
+    public bool $sent = true;
+
     private ?array $decoded = null;
 
     public function __construct(

@@ -328,6 +328,7 @@ class Mapping extends Component
             'striptags' => is_string($value) ? strip_tags($value) : $value,
             'int' => (int)$value,
             'float', 'number' => (float)$value,
+            'decimal' => self::parseDecimal($value, $argument ?: ','),
             'abs' => is_numeric($value) ? abs((float)$value) : $value,
             'round' => is_numeric($value) ? round((float)$value, (int)($argument ?? 2)) : $value,
             'bool' => $this->toBool($value),
@@ -364,6 +365,7 @@ class Mapping extends Component
             'striptags' => Craft::t('erpy', 'Strip HTML'),
             'int' => Craft::t('erpy', 'Whole number'),
             'number' => Craft::t('erpy', 'Decimal number'),
+            'decimal:,' => Craft::t('erpy', 'Decimal number with a comma (1.234,56)'),
             'round:2' => Craft::t('erpy', 'Round to 2 decimals'),
             'abs' => Craft::t('erpy', 'Absolute value'),
             'bool' => Craft::t('erpy', 'Yes/no'),
@@ -380,6 +382,53 @@ class Mapping extends Component
             'default:' => Craft::t('erpy', 'Fall back to…'),
             'nullif:' => Craft::t('erpy', 'Treat this value as empty…'),
         ];
+    }
+
+    /**
+     * Read a number written the way its locale writes it: `1.234,56` and `1 234,56` with a comma
+     * separator, `1,234.56` with a point. Returns null for anything that is not a number, rather
+     * than PHP's cast quietly turning `12,50` into twelve.
+     */
+    public static function parseDecimal(mixed $value, string $separator = ','): ?float
+    {
+        if (is_int($value) || is_float($value)) {
+            return (float)$value;
+        }
+
+        if (!is_string($value)) {
+            return null;
+        }
+
+        // Spaces, no-break spaces and apostrophes are thousands separators wherever they appear.
+        $value = str_replace([' ', "\u{00A0}", "\u{202F}", "'"], '', trim($value));
+
+        if ($value === '') {
+            return null;
+        }
+
+        $decimal = $separator === ',' ? ',' : '.';
+        $group = $decimal === ',' ? '.' : ',';
+        $d = preg_quote($decimal, '/');
+        $g = preg_quote($group, '/');
+
+        // `1.234,56` — grouped in threes, with or without decimals.
+        if (preg_match('/^[+-]?\d{1,3}(' . $g . '\d{3})+(' . $d . '\d+)?$/', $value)) {
+            return (float)str_replace([$group, $decimal], ['', '.'], $value);
+        }
+
+        // `1234,56` or `1234`.
+        if (preg_match('/^[+-]?\d+(' . $d . '\d+)?$/', $value)) {
+            return (float)str_replace($decimal, '.', $value);
+        }
+
+        // The other mark, where it cannot be a thousands separator (`9.90` in a comma file, `12,5`
+        // in a point one): a file mixing the two is common, multiplying it by a hundred is not
+        // an acceptable reading of it.
+        if (preg_match('/^[+-]?\d+' . $g . '(\d{1,2}|\d{4,})$/', $value)) {
+            return (float)str_replace($group, '.', $value);
+        }
+
+        return null;
     }
 
     private function replace(mixed $value, string $argument): mixed

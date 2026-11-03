@@ -88,7 +88,7 @@
                     label: field.label,
                     instructions: field.instructions,
                     id: 'copy-' ~ field.name,
-                    value: field.value,
+                    value: field.value|replace({ '{handle}': connection.handle ?: 'handle' }),
                     class: 'code',
                     readonly: true
                 }) }}
@@ -244,6 +244,55 @@
                                 {% endif %}
                             </td>
                         </tr>
+                        {% set fieldsForEntity = entityFields[entity] ?? [] %}
+                        {% if fieldsForEntity|length %}
+                            <tr class="erpy-entity-fields">
+                                <td></td>
+                                <td colspan="5">
+                                    <div class="flex flex-wrap" style="align-items: flex-start; gap: 12px;">
+                                        {% for field in fieldsForEntity %}
+                                            {# `when` shows a field only for some values of a connection setting — the
+                                               file name for a folder, the upload control for the inbox. #}
+                                            {% set shown = true %}
+                                            {% for setting, allowed in field.when ?? {} %}
+                                                {% set current = connection.settings[setting] ?? (settingsFields|filter(f => f.name == setting)|first).default ?? '' %}
+                                                {% if current not in (allowed is iterable ? allowed : [allowed]) %}{% set shown = false %}{% endif %}
+                                            {% endfor %}
+                                            {% if shown %}
+                                                <div style="min-width: 180px;">
+                                                    {% if field.type == 'upload' %}
+                                                        <div class="heading"><label>{{ field.label }}</label></div>
+                                                        {% if field.instructions %}<p class="light">{{ field.instructions }}</p>{% endif %}
+                                                        {% if connection.id %}
+                                                            <input type="file" class="erpy-upload-file" data-entity="{{ entity }}" accept="{{ field.accept ?? '' }}">
+                                                            <button type="button" class="btn small erpy-upload" data-entity="{{ entity }}">{{ 'Upload'|t('erpy') }}</button>
+                                                            <span class="light erpy-upload-result" data-entity="{{ entity }}"></span>
+                                                        {% else %}
+                                                            <p class="light">{{ 'Save the connection before uploading.'|t('erpy') }}</p>
+                                                        {% endif %}
+                                                    {% else %}
+                                                        {{ forms.textField({
+                                                            label: field.label,
+                                                            instructions: field.instructions ?? '',
+                                                            id: 'sync-' ~ entity ~ '-' ~ field.name,
+                                                            name: 'sync[' ~ entity ~ '][filters][' ~ field.name ~ ']',
+                                                            value: config.filters[field.name] ?? field.default ?? '',
+                                                            placeholder: field.placeholder ?? '',
+                                                            class: 'code'
+                                                        }) }}
+                                                    {% endif %}
+                                                </div>
+                                            {% else %}
+                                                {# Kept, so saving the form does not wipe a value that is only hidden. #}
+                                                {% if field.type != 'upload' %}
+                                                    <input type="hidden" name="sync[{{ entity }}][filters][{{ field.name }}]" value="{{ config.filters[field.name] ?? '' }}">
+                                                {% endif %}
+                                            {% endif %}
+                                        {% endfor %}
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endif %}
                     {% endif %}
                 {% endfor %}
             </tbody>
@@ -329,6 +378,43 @@
                         .finally(function() { test.classList.remove('disabled'); });
                 });
             }
+
+            // An upload is a secondary action on a page that is already a form, so it posts on
+            // its own rather than through a nested <form>.
+            document.querySelectorAll('.erpy-upload').forEach(function(button) {
+                button.addEventListener('click', function() {
+                    const entity = button.dataset.entity;
+                    const input = document.querySelector('.erpy-upload-file[data-entity="' + entity + '"]');
+                    const result = document.querySelector('.erpy-upload-result[data-entity="' + entity + '"]');
+
+                    if (!input || !input.files.length) {
+                        result.className = 'error erpy-upload-result';
+                        result.textContent = {{ 'Choose a file first.'|t('erpy')|json_encode|raw }};
+                        return;
+                    }
+
+                    const data = new FormData();
+                    data.append('id', id);
+                    data.append('entity', entity);
+                    data.append('file', input.files[0]);
+
+                    button.classList.add('disabled');
+                    result.className = 'light erpy-upload-result';
+                    result.textContent = {{ 'Uploading…'|t('erpy')|json_encode|raw }};
+
+                    Craft.sendActionRequest('POST', 'erpy/files/upload', { data: data })
+                        .then(function(response) {
+                            result.className = 'success erpy-upload-result';
+                            result.textContent = response.data.message;
+                            input.value = '';
+                        })
+                        .catch(function(error) {
+                            result.className = 'error erpy-upload-result';
+                            result.textContent = (error.response && error.response.data && (error.response.data.message || error.response.data.error)) || {{ 'The upload failed.'|t('erpy')|json_encode|raw }};
+                        })
+                        .finally(function() { button.classList.remove('disabled'); });
+                });
+            });
 
             const disconnect = document.getElementById('erpy-oauth-disconnect');
 

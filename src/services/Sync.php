@@ -12,6 +12,7 @@ use justinholtweb\erpy\base\FetchCriteria;
 use justinholtweb\erpy\events\ApplyDocumentEvent;
 use justinholtweb\erpy\events\RunEvent;
 use justinholtweb\erpy\models\canonical\ErpDocument;
+use justinholtweb\erpy\models\canonical\ErpStock;
 use justinholtweb\erpy\models\Connection;
 use justinholtweb\erpy\models\DeadLetter;
 use justinholtweb\erpy\models\Run;
@@ -115,6 +116,7 @@ class Sync extends Component
             while ($page < $maxPages) {
                 $page++;
                 $result = $connector->fetchPage($entity, $criteria);
+                $documents = [];
 
                 foreach ($result->items as $document) {
                     if (!$document instanceof ErpDocument) {
@@ -122,7 +124,21 @@ class Sync extends Component
                         continue;
                     }
 
-                    $this->applyOne($connection, $entity, $document, $map, $run, $dryRun);
+                    $documents[] = $document;
+                }
+
+                // Stock is applied a page at a time so a site with a bulk writer can take the
+                // whole page; everything else one document at a time.
+                if ($entity === Entity::INVENTORY) {
+                    $this->applyStockPage($connection, $documents, $map, $run, $dryRun);
+                } else {
+                    foreach ($documents as $document) {
+                        $this->applyOne($connection, $entity, $document, $map, $run, $dryRun);
+                    }
+                }
+
+                foreach ($result->rejected as $rejected) {
+                    $this->rejectOne($connection, $entity, $rejected, $run, $dryRun);
                 }
 
                 if (!$result->hasMore()) {
@@ -223,7 +239,63 @@ class Sync extends Component
     private function applyOne(Connection $connection, string $entity, ErpDocument $document, $map, Run $run, bool $dryRun): void
     {
         $startedAt = microtime(true);
+        $prepared = $this->prepare($connection, $entity, $document, $map, $run, $dryRun, $startedAt);
 
+        if ($prepared === null) {
+            return;
+        }
+
+        try {
+            $result = $this->apply($connection, $entity, $prepared, $map, $dryRun);
+        } catch (Throwable $e) {
+            $result = ApplyResult::failed($e->getMessage());
+        }
+
+        $this->settle($connection, $entity, $document, $result, $run, $dryRun, (int)round((microtime(true) - $startedAt) * 1000));
+    }
+
+    /**
+     * Apply one page of stock through the catalogue's batch path, with the same event, overlay,
+     * run items and dead letters as `applyOne()`.
+     *
+     * @param ErpDocument[] $documents
+     */
+    private function applyStockPage(Connection $connection, array $documents, $map, Run $run, bool $dryRun): void
+    {
+        $startedAt = microtime(true);
+        $prepared = [];
+
+        foreach ($documents as $key => $document) {
+            $ready = $this->prepare($connection, Entity::INVENTORY, $document, $map, $run, $dryRun, $startedAt);
+
+            if ($ready instanceof ErpStock) {
+                $prepared[$key] = $ready;
+            } elseif ($ready !== null) {
+                $this->settle($connection, Entity::INVENTORY, $document, ApplyResult::failed(Craft::t('erpy', 'The connector returned something that is not a stock document.'), false), $run, $dryRun, 0);
+            }
+        }
+
+        try {
+            $results = Plugin::getInstance()->getCatalog()->applyStockBatch($connection, $prepared, $map, $dryRun);
+        } catch (Throwable $e) {
+            $results = array_map(fn() => ApplyResult::failed($e->getMessage()), $prepared);
+        }
+
+        // A batch has no per-document timing; each gets its share.
+        $durationMs = $prepared === [] ? 0 : (int)round((microtime(true) - $startedAt) * 1000 / count($prepared));
+
+        foreach ($prepared as $key => $document) {
+            $this->settle($connection, Entity::INVENTORY, $documents[$key], $results[$key] ?? ApplyResult::failed(Craft::t('erpy', 'Nothing applied this document.')), $run, $dryRun, $durationMs);
+        }
+    }
+
+    /**
+     * The event and the mapping overlay: everything between the connector and an applier.
+     * Returns the document to apply, or null when it has already been recorded as skipped or
+     * failed.
+     */
+    private function prepare(Connection $connection, string $entity, ErpDocument $document, $map, Run $run, bool $dryRun, float $startedAt): ?ErpDocument
+    {
         $event = new ApplyDocumentEvent([
             'connection' => $connection,
             'entity' => $entity,
@@ -234,21 +306,27 @@ class Sync extends Component
         if (!$event->isValid) {
             Plugin::getInstance()->getRuns()->item($run, RunItem::ACTION_SKIPPED, $document->naturalKey(), $document->remoteId, null, Craft::t('erpy', 'Skipped by an event handler.'));
 
-            return;
+            return null;
         }
 
         try {
             // The merchant's corrections to the connector's own reading of the ERP are applied
             // first, so an applier only ever sees a document the merchant agrees with.
             Plugin::getInstance()->getMapping()->overlay($map, $event->document, ['connection' => $connection]);
-
-            $result = $this->apply($connection, $entity, $event->document, $map, $dryRun);
         } catch (Throwable $e) {
-            $result = ApplyResult::failed($e->getMessage());
+            $this->settle($connection, $entity, $document, ApplyResult::failed($e->getMessage()), $run, $dryRun, (int)round((microtime(true) - $startedAt) * 1000));
+
+            return null;
         }
 
-        $durationMs = (int)round((microtime(true) - $startedAt) * 1000);
+        return $event->document;
+    }
 
+    /**
+     * Record what applying a document did: the run item, and its dead letter opened or cleared.
+     */
+    private function settle(Connection $connection, string $entity, ErpDocument $document, ApplyResult $result, Run $run, bool $dryRun, int $durationMs): void
+    {
         Plugin::getInstance()->getRuns()->item(
             run: $run,
             action: $result->action,
@@ -277,6 +355,37 @@ class Sync extends Component
             // A document that succeeds clears its own dead letter, so a merchant who fixes the
             // cause upstream does not have to come back and tidy up.
             $deadLetters->resolve($connection, $entity, $document->naturalKey());
+        }
+    }
+
+    /**
+     * Record a record the connector could not read at all. It never reached an applier, so the
+     * dead letter holds the ERP's own row and is not retryable: replaying the same unreadable row
+     * can only fail the same way. A corrected file that brings the record back under the same
+     * key clears it like any other success.
+     *
+     * @param array{key:string,message:string,raw:array} $rejected
+     */
+    private function rejectOne(Connection $connection, string $entity, array $rejected, Run $run, bool $dryRun): void
+    {
+        Plugin::getInstance()->getRuns()->item(
+            run: $run,
+            action: RunItem::ACTION_FAILED,
+            naturalKey: $rejected['key'],
+            message: $rejected['message'],
+        );
+
+        if (!$dryRun) {
+            Plugin::getInstance()->getDeadLetters()->record(
+                connection: $connection,
+                entity: $entity,
+                direction: Direction::PULL,
+                naturalKey: $rejected['key'],
+                localId: null,
+                document: ['raw' => $rejected['raw']],
+                error: $rejected['message'],
+                retryable: false,
+            );
         }
     }
 
