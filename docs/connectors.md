@@ -171,7 +171,48 @@ later sync that brings the same key back successfully clears the dead letter.
 Some ERPs don't take orders. They come and fetch them. A connector answering `true` from
 `deliversOnRequest(Entity::ORDER)` is never handed an order at checkout, by a retry or by the
 console. Its orders are still delivered through `Push::deliver()`, but only on the export trigger.
-The File / URL exchange connector's export URL works this way.
+
+To have the ERP fetch them from Erpy's export URL (`erpy/export/<handle>/orders`) in your own
+format, implement `ServesOrders` as well and add the export settings to your fields:
+
+```php
+use justinholtweb\erpy\base\OrderExport;
+use justinholtweb\erpy\base\ServesOrders;
+
+class XcVisionConnector extends Connector implements ServesOrders
+{
+    public static function capabilities(): Capabilities
+    {
+        return Capabilities::make()->supports(Entity::ORDER, Direction::PUSH);
+    }
+
+    public static function settingsFields(): array
+    {
+        // The token, "token in the URL", allowed IP addresses, the URL's date format, and the
+        // export URL to copy — read by Erpy's export endpoint, not by your connector.
+        return [...OrderExport::fields()];
+    }
+
+    public function deliversOnRequest(string $entity): bool
+    {
+        return $entity === Entity::ORDER;
+    }
+
+    /** @param ErpOrder[] $orders — may be empty: a poll with nothing new still gets a document */
+    public function renderServed(array $orders): string { /* your XML */ }
+
+    public function servedContentType(): string { return 'application/xml; charset=windows-1250'; }
+
+    public function servedExtension(): string { return 'xml'; }
+}
+```
+
+The endpoint does the rest: it finds the orders, passes each through `Push::deliver()` (the identity
+map, the run log, the Problems screen, re-serving a `from`/`to` range) and hands the delivered ones
+to `renderServed()`. Your `pushOrder()` is never called for a served order. `renderServed()` runs
+inside the transaction that records the orders as delivered. If it throws, nothing is marked and
+the ERP gets a `500`, so the next fetch serves the same orders again. The File / URL exchange
+connector is built the same way.
 
 ### The transport redacts secrets
 

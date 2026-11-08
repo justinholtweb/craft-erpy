@@ -164,7 +164,10 @@ class Orders extends Component
         return new ErpAddress([
             'type' => $type,
             'fullName' => $address->fullName ?: trim(($address->firstName ?? '') . ' ' . ($address->lastName ?? '')) ?: null,
+            'firstName' => $address->firstName ?: null,
+            'lastName' => $address->lastName ?: null,
             'organization' => $address->organization,
+            'taxId' => $address->organizationTaxId ?: null,
             'addressLine1' => $address->addressLine1,
             'addressLine2' => $address->addressLine2,
             'addressLine3' => $address->addressLine3,

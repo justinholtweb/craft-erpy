@@ -131,18 +131,20 @@ class LocalSource extends BaseSource
             return is_file($full) ? $full : null;
         }
 
-        $dir = $this->inside(dirname($path) === '.' ? '' : dirname($path));
+        $relativeDir = dirname($path) === '.' ? '' : dirname($path);
+        $dir = $this->inside($relativeDir);
         $candidates = [];
 
         foreach (is_dir($dir) ? new \DirectoryIterator($dir) : [] as $item) {
-            if ($item->isFile()) {
+            // A symlink in the share could point anywhere; a wildcard only picks real files.
+            if ($item->isFile() && !$item->isLink()) {
                 $candidates[$item->getFilename()] = $item->getMTime();
             }
         }
 
         $name = self::newest($candidates, basename($path));
 
-        return $name === null ? null : $dir . DIRECTORY_SEPARATOR . $name;
+        return $name === null ? null : $this->inside(ltrim($relativeDir . '/' . $name, '/'));
     }
 
     /**

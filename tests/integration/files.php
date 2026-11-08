@@ -25,10 +25,15 @@ use craft\commerce\elements\Product;
 use craft\commerce\elements\Variant;
 use craft\commerce\Plugin as Commerce;
 use GuzzleHttp\Client;
+use justinholtweb\erpy\base\Capabilities;
+use justinholtweb\erpy\base\Connector;
 use justinholtweb\erpy\base\Direction;
 use justinholtweb\erpy\base\Entity;
 use justinholtweb\erpy\base\FetchCriteria;
+use justinholtweb\erpy\base\OrderExport;
+use justinholtweb\erpy\base\PushResult;
 use justinholtweb\erpy\base\Response;
+use justinholtweb\erpy\base\ServesOrders;
 use justinholtweb\erpy\base\Transport;
 use justinholtweb\erpy\connectors\FileConnector;
 use justinholtweb\erpy\db\Table;
@@ -52,6 +57,64 @@ use justinholtweb\erpy\models\Connection;
 use justinholtweb\erpy\models\Run;
 use justinholtweb\erpy\Plugin;
 use justinholtweb\erpy\services\Mapping;
+
+/**
+ * What a craft-erpy-<vendor> add-on with its own served format looks like (GitHub #3): it
+ * declares order push, answers deliversOnRequest(), and renders. It never sends anything.
+ */
+final class ServingTestConnector extends Connector implements ServesOrders
+{
+    public static int $pushed = 0;
+
+    public static function handle(): string
+    {
+        return 'erpyservetest';
+    }
+
+    public static function displayName(): string
+    {
+        return 'Serving test ERP';
+    }
+
+    public static function capabilities(): Capabilities
+    {
+        return Capabilities::make()->supports(Entity::ORDER, Direction::PUSH);
+    }
+
+    public static function settingsFields(): array
+    {
+        return OrderExport::fields();
+    }
+
+    public function deliversOnRequest(string $entity): bool
+    {
+        return $entity === Entity::ORDER;
+    }
+
+    protected function pushOrder(ErpOrder $document, ?string $remoteId = null): PushResult
+    {
+        self::$pushed++;
+
+        return PushResult::ok('sent-' . $document->orderNumber, $document->orderNumber);
+    }
+
+    public function renderServed(array $orders): string
+    {
+        return implode("\n", array_map(static fn(ErpOrder $o) => implode('|', [
+            'XCV', $o->orderNumber, $o->billingAddress?->firstName, $o->billingAddress?->lastName, $o->billingAddress?->taxId,
+        ]), $orders));
+    }
+
+    public function servedContentType(): string
+    {
+        return 'text/plain; charset=utf-8';
+    }
+
+    public function servedExtension(): string
+    {
+        return 'txt';
+    }
+}
 
 $passed = 0;
 $failed = 0;
@@ -159,6 +222,8 @@ function makeOrder(Variant $variant, int $qty = 2): Order
     $order->setLineItems([Commerce::getInstance()->getLineItems()->createLineItem($order, $variant->id, [], $qty)]);
     $address = [
         'fullName' => 'Špela Čeh',
+        'organization' => 'Žaba d.o.o.',
+        'organizationTaxId' => 'SI12345678',
         'addressLine1' => 'Žabja ulica 7',
         'locality' => 'Ljubljana',
         'postalCode' => '1000',
@@ -368,6 +433,25 @@ XML;
         return 'read';
     });
 
+    check('nor can a UTF-16 file or a DOCTYPE past the first 64 KB slip past the byte scan', function() {
+        $doctype = '<!DOCTYPE r [<!ENTITY a "aaaaaaaaaa"><!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">]><Items><Item><Sku>&b;</Sku></Item></Items>';
+        $files = [
+            fixture('laughs16.xml', "\xFF\xFE" . mb_convert_encoding('<?xml version="1.0" encoding="UTF-16"?>' . $doctype, 'UTF-16LE', 'UTF-8')),
+            fixture('laughsfar.xml', '<?xml version="1.0"?><!--' . str_repeat('x', 70000) . '-->' . $doctype),
+        ];
+        $refused = 0;
+
+        foreach ($files as $file) {
+            try {
+                readAll(new XmlRecordReader('//Item'), $file);
+            } catch (FileException $e) {
+                $refused += $e->retryable ? 0 : 1;
+            }
+        }
+
+        return $refused === 2 ?: "only $refused of 2 refused";
+    });
+
     check('an XML file’s own encoding declaration beats the connection setting', function() {
         $rows = readAll(new XmlRecordReader('//Item', 'WINDOWS-1250'), fixture('utf8decl.xml', '<?xml version="1.0" encoding="UTF-8"?><Items><Item><Sku>Šč</Sku></Item></Items>'));
 
@@ -459,6 +543,14 @@ XML;
         }
 
         return 'the symlink was followed';
+    });
+
+    check('nor can a wildcard pick a symlink that leads out of it', function() use ($inDir) {
+        @symlink('/etc/hostname', "$inDir/leak_99999999.csv");
+        fixture('leak_00000001.csv', "sku,qty\nA,1\n", age: 400000000);
+        $file = (new LocalSource($inDir))->fetch('leak_*.csv');
+
+        return $file?->name === 'leak_00000001.csv' ?: 'picked ' . (string)$file?->name;
     });
 
     check('a relative folder is refused rather than read from wherever PHP happens to be', function() {
@@ -993,6 +1085,98 @@ XML;
         return [$basic, $query] === [200, 200] ?: json_encode([$basic, $query]);
     });
 
+    check('an allowed IP address fetches without a token; a forged X-Forwarded-For does not', function() use ($http, $export, $token, &$connection) {
+        $serve = ['orderMode' => FileConnector::MODE_SERVE, 'orderEncoding' => 'WINDOWS-1250'];
+        // The harness keeps Craft's default trustedHosts ("any"), so the TCP peer is what counts:
+        // loopback, for a request from inside the container.
+        $connection = reconfigure($connection, $serve + ['exportToken' => $token, 'exportAllowedIps' => '127.0.0.1, ::1']);
+        $listed = $http->get($export)->getStatusCode();
+        $connection = reconfigure($connection, $serve + ['exportAllowedIps' => '127.0.0.0/8, ::1']);
+        $ipOnly = $http->get($export)->getStatusCode();
+        $connection = reconfigure($connection, $serve + ['exportToken' => $token, 'exportAllowedIps' => '203.0.113.7']);
+        $forged = $http->get($export, ['headers' => ['X-Forwarded-For' => '203.0.113.7']])->getStatusCode();
+        $forgedWithToken = $http->get($export, ['headers' => ['X-Forwarded-For' => '203.0.113.7', 'X-Erpy-Token' => $token]])->getStatusCode();
+        $connection = reconfigure($connection, $serve + ['exportToken' => $token]);
+
+        return [$listed, $ipOnly, $forged, $forgedWithToken] === [200, 200, 404, 200]
+            ?: json_encode(['listed' => $listed, 'ipOnly' => $ipOnly, 'forged' => $forged, 'forgedWithToken' => $forgedWithToken]);
+    });
+
+    check('allowed addresses: ranges match, typos and whole-internet ranges never let anybody in', function() {
+        $connection = new Connection(['settings' => ['exportAllowedIps' => "203.0.113.0/24;\n2001:db8::/48, nonsense, 10.0.0.1/40, 0.0.0.0/0, ::/0, 1.2.3.4/abc"]]);
+        $allowed = OrderExport::allowedIps($connection);
+        $cases = [
+            '203.0.113.200' => true,
+            '203.0.114.1' => false,
+            '::ffff:203.0.113.9' => true,
+            '2001:db8:0:1::5' => true,
+            '2001:db9::1' => false,
+            '8.8.8.8' => false,
+            'nonsense' => false,
+            '' => false,
+        ];
+        $wrong = array_filter($cases, static fn(bool $expected, string $ip) => OrderExport::ipAllowed($ip, $allowed) !== $expected, ARRAY_FILTER_USE_BOTH);
+
+        return ($allowed === ['203.0.113.0/24', '2001:db8::/48'] && $wrong === []) ?: json_encode(['allowed' => $allowed, 'wrong' => $wrong]);
+    });
+
+    check('from / to: a dashed date-time is not read as a UTC offset, and a date format is honoured', function() {
+        $tz = Craft::$app->getTimeZone();
+        $dashed = OrderExport::parseDate('2026-11-03-14-30');
+        $formatted = OrderExport::parseDate('03.11.2026', 'd.m.Y', endOfDay: true);
+        $iso = OrderExport::parseDate('2026-11-03', 'd.m.Y', endOfDay: true);
+
+        try {
+            OrderExport::parseDate('next to nothing');
+            $refused = false;
+        } catch (InvalidArgumentException) {
+            $refused = true;
+        }
+
+        $got = [
+            $dashed->format('Y-m-d H:i e'),
+            $formatted->format('Y-m-d H:i:s e'),
+            $iso->format('Y-m-d H:i:s e'),
+            $refused,
+        ];
+
+        return $got === ["2026-11-03 14:30 $tz", "2026-11-03 23:59:59 $tz", "2026-11-03 23:59:59 $tz", true] ?: json_encode($got);
+    });
+
+    check('an ERP’s own URL date format serves the range over HTTP', function() use ($http, $export, $token, $served, &$connection) {
+        $today = new DateTime('now', new DateTimeZone(Craft::$app->getTimeZone()));
+        $dashed = $http->get("$export&from=" . $today->format('Y-m-d') . '-00-00', ['headers' => ['X-Erpy-Token' => $token]]);
+        $connection = reconfigure($connection, ['orderMode' => FileConnector::MODE_SERVE, 'exportToken' => $token, 'exportDateFormat' => 'd.m.Y']);
+        $formatted = $http->get("$export&from=" . $today->format('d.m.Y') . '&to=' . $today->format('d.m.Y'), ['headers' => ['X-Erpy-Token' => $token]]);
+        $bad = $http->get("$export&from=yesterday-ish", ['headers' => ['X-Erpy-Token' => $token]])->getStatusCode();
+        $connection = reconfigure($connection, ['orderMode' => FileConnector::MODE_SERVE, 'exportToken' => $token, 'orderEncoding' => 'WINDOWS-1250']);
+
+        return (str_contains((string)$dashed->getBody(), $served->number) && str_contains((string)$formatted->getBody(), $served->number) && $bad === 400)
+            ?: json_encode([$dashed->getStatusCode(), $formatted->getStatusCode(), $bad, substr((string)$formatted->getBody(), 0, 200)]);
+    });
+
+    check('an ERP’s existing URL, routed in config/routes.php, gets its from-date from the path', function() use ($http, $token, $served, $connection) {
+        $routes = Craft::$app->getPath()->getConfigPath() . '/routes.php';
+        $original = file_get_contents($routes);
+        file_put_contents($routes, "<?php\nreturn " . var_export([
+            "erpy-test-{$connection->handle}/orders-time/<from>" => ['route' => 'erpy/export/orders', 'defaults' => ['connectionHandle' => $connection->handle]],
+        ], true) . ";\n");
+
+        try {
+            $today = (new DateTime('now', new DateTimeZone(Craft::$app->getTimeZone())))->format('Y-m-d');
+            $tomorrow = (new DateTime('tomorrow', new DateTimeZone(Craft::$app->getTimeZone())))->format('Y-m-d');
+            $hit = $http->get("index.php?p=erpy-test-{$connection->handle}/orders-time/{$today}-00-00", ['headers' => ['X-Erpy-Token' => $token]]);
+            $miss = $http->get("index.php?p=erpy-test-{$connection->handle}/orders-time/{$tomorrow}-00-00", ['headers' => ['X-Erpy-Token' => $token]]);
+        } finally {
+            file_put_contents($routes, $original);
+        }
+
+        // Tomorrow's range is empty: had `from` been dropped, this would be "new orders", not an error.
+        return ($hit->getStatusCode() === 200 && str_contains((string)$hit->getBody(), $served->number)
+            && $miss->getStatusCode() === 200 && $miss->getHeaderLine('X-Erpy-Count') === '0')
+            ?: json_encode([$hit->getStatusCode(), $hit->getHeaderLine('X-Erpy-Count'), $miss->getStatusCode(), $miss->getHeaderLine('X-Erpy-Count')]);
+    });
+
     check('an unknown or disabled export answers 404, whatever the token', function() use ($http, $token, $plugin, &$connection) {
         $unknown = $http->get('index.php?p=erpy/export/no-such-handle/orders', ['headers' => ['X-Erpy-Token' => $token]])->getStatusCode();
         $connection->enabled = false;
@@ -1009,6 +1193,52 @@ XML;
 
         return (!str_contains($raw, $token) && str_contains($raw, 'enc:')) ?: 'stored as ' . substr($raw, 0, 200);
     });
+
+    // -----------------------------------------------------------------------------------------
+    section('Serving orders from an add-on connector');
+
+    yii\base\Event::on(justinholtweb\erpy\services\Connectors::class, justinholtweb\erpy\services\Connectors::EVENT_REGISTER_CONNECTORS, static function(craft\events\RegisterComponentTypesEvent $event) {
+        $event->types[] = ServingTestConnector::class;
+    });
+    // The registry is memoised; drop it so the test connector is collected.
+    (new ReflectionProperty(justinholtweb\erpy\services\Connectors::class, 'connectors'))->setValue($plugin->getConnectors(), null);
+
+    $addon = new Connection([
+        'name' => "Erpy serving add-on $suffix",
+        'handle' => "erpyserve$suffix",
+        'connector' => ServingTestConnector::handle(),
+        'enabled' => true,
+        'storeId' => $storeId,
+        'settings' => ['exportToken' => $token],
+        'sync' => [Entity::ORDER => ['enabled' => true, 'direction' => Direction::PUSH]],
+    ]);
+    $plugin->getConnections()->save($addon, false);
+    $addonOrder = makeOrder($variantB, 1);
+
+    check('an add-on’s served order passes through Push::deliver() into renderServed(), never its pushOrder()', function() use ($plugin, $addon, $addonOrder) {
+        ServingTestConnector::$pushed = 0;
+        $connector = $addon->getConnector();
+        $outside = $plugin->getPush()->order($addon, $addonOrder, ['trigger' => Run::TRIGGER_EXPORT]);
+        $collected = Connector::collect(function() use ($plugin, $addon, $addonOrder) {
+            $plugin->getPush()->order($addon, $addonOrder, ['trigger' => Run::TRIGGER_EXPORT]);
+        });
+        $body = $connector instanceof ServesOrders ? $connector->renderServed($collected) : '';
+        $link = $plugin->getLinks()->find($addon, Entity::ORDER, $addonOrder->number);
+
+        return (!$outside->success && count($collected) === 1 && ServingTestConnector::$pushed === 0
+            && $body === "XCV|{$addonOrder->number}|Špela|Čeh|SI12345678"
+            && str_starts_with((string)$link?->remoteId, 'export:'))
+            ?: json_encode(['outside' => $outside->message, 'collected' => count($collected), 'pushed' => ServingTestConnector::$pushed, 'body' => $body, 'link' => $link?->remoteId]);
+    });
+
+    check('the canonical address carries the name in parts and the tax id', function() use ($plugin, $connection, $order) {
+        $address = $plugin->getPush()->buildOrder($connection, $order)->billingAddress;
+        $got = [$address?->fullName, $address?->firstName, $address?->lastName, $address?->organization, $address?->taxId];
+
+        return $got === ['Špela Čeh', 'Špela', 'Čeh', 'Žaba d.o.o.', 'SI12345678'] ?: json_encode($got, JSON_UNESCAPED_UNICODE);
+    });
+
+    $plugin->getConnections()->delete($addon);
 
     // -----------------------------------------------------------------------------------------
     section('Over HTTP, as a signed-in user');

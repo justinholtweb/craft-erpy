@@ -3,7 +3,6 @@
 namespace justinholtweb\erpy\connectors;
 
 use Craft;
-use craft\helpers\UrlHelper;
 use DateTimeImmutable;
 use justinholtweb\erpy\auth\ApiKeyAuth;
 use justinholtweb\erpy\auth\BasicAuth;
@@ -15,8 +14,10 @@ use justinholtweb\erpy\base\Entity;
 use justinholtweb\erpy\base\FetchCriteria;
 use justinholtweb\erpy\base\Field;
 use justinholtweb\erpy\base\HealthResult;
+use justinholtweb\erpy\base\OrderExport;
 use justinholtweb\erpy\base\Page;
 use justinholtweb\erpy\base\PushResult;
+use justinholtweb\erpy\base\ServesOrders;
 use justinholtweb\erpy\files\CsvReader;
 use justinholtweb\erpy\files\Encoding;
 use justinholtweb\erpy\files\FileException;
@@ -62,7 +63,7 @@ use Throwable;
  *   next run, and an XML file that stops being well-formed is refused whole.
  * - Files carry no ids. A row's natural key is its remote id, so the identity map still works.
  */
-class FileConnector extends Connector
+class FileConnector extends Connector implements ServesOrders
 {
     public const SOURCE_LOCAL = 'local';
     public const SOURCE_URL = 'url';
@@ -83,9 +84,6 @@ class FileConnector extends Connector
         Entity::ORDER_STATUS,
         Entity::SHIPMENT,
     ];
-
-    /** @var ErpOrder[]|null orders handed over while the export endpoint is collecting */
-    private static ?array $collected = null;
 
     private ?FileSource $source = null;
 
@@ -225,15 +223,7 @@ class FileConnector extends Connector
                 'instructions' => Craft::t('erpy', 'Optional. A site template that receives `orders` and writes the file itself, for an ERP that wants its own layout.'),
                 'suggestEnvVars' => false,
             ]),
-            Field::secret('exportToken', Craft::t('erpy', 'Export token'), [
-                'instructions' => Craft::t('erpy', 'What the ERP sends to fetch orders: as an `X-Erpy-Token` header, or as the password of a basic-auth login. Use a long random value.'),
-            ]),
-            Field::boolean('exportTokenInUrl', Craft::t('erpy', 'Also accept the token in the URL'), [
-                'instructions' => Craft::t('erpy', 'As `?key=…`, only for an ERP that can fetch nothing but a plain address. A token in a URL ends up in server logs.'),
-            ]),
-            Field::copyable('exportUrl', Craft::t('erpy', 'Export URL'), self::exportUrlTemplate(), [
-                'instructions' => Craft::t('erpy', 'Add `?from=2026-11-01&to=2026-11-03` to fetch a date range again, or `?all=1` for every order. Without them, only orders not yet fetched.'),
-            ]),
+            ...OrderExport::fields(),
         ];
     }
 
@@ -308,9 +298,9 @@ class FileConnector extends Connector
         }
 
         if ($this->setting('orderMode') === self::MODE_SERVE) {
-            $details[Craft::t('erpy', 'Orders')] = (string)$this->setting('exportToken') === ''
-                ? Craft::t('erpy', 'Served at the export URL once an export token is set.')
-                : Craft::t('erpy', 'Served at {url}', ['url' => str_replace('{handle}', $this->connection->handle, self::exportUrlTemplate())]);
+            $details[Craft::t('erpy', 'Orders')] = OrderExport::isConfigured($this->connection)
+                ? Craft::t('erpy', 'Served at {url}', ['url' => OrderExport::url($this->connection)])
+                : Craft::t('erpy', 'Served at the export URL once an export token or an allowed IP address is set.');
         } elseif ($this->connection->syncs(Entity::ORDER, Direction::PUSH)) {
             try {
                 $target = $this->orderTarget();
@@ -646,17 +636,6 @@ class FileConnector extends Connector
             return PushResult::rejected(Craft::t('erpy', 'That is not an order.'));
         }
 
-        if ($this->setting('orderMode') === self::MODE_SERVE) {
-            // Only the export endpoint hands orders over in this mode, and it is collecting.
-            if (self::$collected === null) {
-                return PushResult::rejected(Craft::t('erpy', 'This connection’s orders are fetched by the ERP from the export URL.'));
-            }
-
-            self::$collected[] = $document;
-
-            return PushResult::ok('export:' . gmdate('Ymd\THis\Z'), $document->orderNumber);
-        }
-
         try {
             $target = $this->orderTarget();
             $writer = $this->orderWriter();
@@ -684,25 +663,19 @@ class FileConnector extends Connector
         return PushResult::ok($name, $document->orderNumber);
     }
 
-    /**
-     * Run `$send`, and return every order this connector was handed while it ran. Only the
-     * export endpoint calls this: it is how a served order passes through `Push::deliver()` —
-     * the identity map, the mutex, the run log — on its way into a response instead of a request.
-     *
-     * @return ErpOrder[]
-     */
-    public static function collect(callable $send): array
+    public function renderServed(array $orders): string
     {
-        $previous = self::$collected;
-        self::$collected = [];
+        return $this->orderWriter()->render($orders);
+    }
 
-        try {
-            $send();
+    public function servedContentType(): string
+    {
+        return $this->orderWriter()->contentType();
+    }
 
-            return self::$collected;
-        } finally {
-            self::$collected = $previous;
-        }
+    public function servedExtension(): string
+    {
+        return $this->orderWriter()->extension();
     }
 
     public function orderWriter(): OrderWriter
@@ -803,11 +776,7 @@ class FileConnector extends Connector
 
     public static function exportUrlTemplate(): string
     {
-        try {
-            return UrlHelper::siteUrl('erpy/export/{handle}/orders');
-        } catch (Throwable) {
-            return '/erpy/export/{handle}/orders';
-        }
+        return OrderExport::urlTemplate();
     }
 
     private function authFailed(FileException $e): void

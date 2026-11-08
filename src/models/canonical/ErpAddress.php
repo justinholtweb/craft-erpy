@@ -17,7 +17,16 @@ class ErpAddress extends ErpDocument
     public ?string $code = null;
 
     public ?string $fullName = null;
+
+    /** The name in its parts, for an ERP that keeps them apart. `fullName` is always set as well. */
+    public ?string $firstName = null;
+    public ?string $lastName = null;
+
     public ?string $organization = null;
+
+    /** The organisation's tax / VAT number (OIB, PIB, USt-IdNr.) as entered on the address. */
+    public ?string $taxId = null;
+
     public ?string $addressLine1 = null;
     public ?string $addressLine2 = null;
     public ?string $addressLine3 = null;

@@ -86,6 +86,12 @@ class XmlRecordReader implements RecordReader
             $moved = $reader->read();
 
             while ($moved) {
+                // The byte scan above misses a UTF-16 file or a declaration past 64 KB; the parser
+                // does not. A DOCTYPE arrives before the root, so before any entity is referenced.
+                if ($reader->nodeType === XMLReader::DOC_TYPE || $reader->nodeType === XMLReader::ENTITY_REF) {
+                    throw FileException::permanent(Craft::t('erpy', 'The XML file declares a DOCTYPE or entities, which Erpy does not read.'));
+                }
+
                 if ($reader->nodeType !== XMLReader::ELEMENT) {
                     $moved = $reader->read();
                     continue;

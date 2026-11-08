@@ -234,12 +234,41 @@ The ERP sends the token one of three ways:
 Use the URL option only for an ERP that can fetch nothing but a plain address, because a token in a
 URL ends up in server logs.
 
+**An ERP that can't send a token at all** can be let in by its address instead. Put it in
+**Allowed IP addresses** (`203.0.113.7`, or `203.0.113.0/24` for a range, separated by commas). A
+request from a listed address doesn't need the token, and a request from anywhere else still does.
+You can leave the token empty if the address is the only way in.
+
+Behind a load balancer, proxy or CDN, set Craft's
+[`trustedHosts`](https://craftcms.com/docs/5.x/reference/config/general.html#trustedhosts) to that
+proxy so Erpy sees the ERP's address and not the proxy's. Until you do, Erpy ignores
+`X-Forwarded-For` for this check. Craft's default trusts it from every host, which would let anyone
+claim to be the ERP with one header.
+
 | Request | Returns |
 |---|---|
 | `…/orders` | Orders this connection hasn't delivered yet, oldest first. |
 | `…/orders?from=2026-11-01&to=2026-11-03` | Every order in that range, delivered or not, so an ERP that lost a response can ask again. Dates are inclusive and in the site's timezone. |
 | `…/orders?all=1` | Every order since the connection was created. |
 | `&limit=500` | At most this many (default 200, maximum 1000). |
+
+`from` and `to` take `2026-11-03`, `2026-11-03T14:00:00` and `2026-11-03-14-00`. When the ERP writes
+dates its own way, set **Date format in the URL** to its
+[PHP date format](https://www.php.net/manual/en/datetime.format.php), for example `d.m.Y` for
+`03.11.2026`. A date without a time means the start of that day as `from` and the end of it as
+`to`.
+
+An ERP already fetching from a URL of its own, like `/export-orders/orders-time/2026-11-03-00-00`,
+can keep it. Add a route in `config/routes.php` that hands the path to the export:
+
+```php
+return [
+    'export-orders/orders-time/<from>' => [
+        'route' => 'erpy/export/orders',
+        'defaults' => ['connectionHandle' => 'shop'],
+    ],
+];
+```
 
 The response uses the order format and encoding set above, and an `X-Erpy-Count` header says how
 many orders it holds.
@@ -249,7 +278,7 @@ Things to know:
 - **Fetching is delivering.** An order is recorded as delivered the moment it's served, and the
   next fetch leaves it out. If the ERP's import fails after the download, fetch the date range again.
 - **Only `GET`.** A `HEAD` request or a link-preview bot can't mark orders as delivered.
-- **A missing or wrong token gets `404`**, the same answer as a handle that doesn't exist, so the
+- **A missing or wrong token gets `404`** (unless the request comes from an allowed address), the same answer as a handle that doesn't exist, so the
   URL gives nothing away. The reason is written to Craft's log.
 - **A fetch that fails marks nothing delivered.** Recording and writing the response happen in one
   database transaction. If an order template throws, the ERP gets a `500` and the next fetch serves

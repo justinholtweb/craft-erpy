@@ -1,5 +1,34 @@
 # Release Notes for Erpy
 
+## 5.4.0 - 2026-11-08
+### Added
+
+- **Add-on connectors can serve orders at the export URL.** A connector that implements
+  `ServesOrders` (`renderServed()`, `servedContentType()`, `servedExtension()`) and answers true
+  from `deliversOnRequest(Entity::ORDER)` is fetched from `erpy/export/<handle>/orders` in its own
+  format. It gets the identity map, the Problems screen and range re-serving like the built-in file
+  connector, which now uses the same path. `OrderExport::fields()` gives an add-on the same export
+  settings. A served order never reaches the connector's `pushOrder()`. (#3)
+- **Allowed IP addresses** for the export URL. A request from a listed address or range can fetch
+  without the token, for an ERP that polls from a fixed address and can't send one. The token may
+  be left empty when an address is the only way in. `X-Forwarded-For` is ignored while Craft's
+  `trustedHosts` is left at its default of every host, so the list can't be bypassed with a header. (#3)
+- **Date format in the URL**, for an ERP that writes `from` / `to` its own way (`d.m.Y`,
+  `Y-m-d-H-i`). (#3)
+- The canonical address now carries `firstName`, `lastName` and `taxId` (from Commerce's
+  `organizationTaxId`), on orders and on pushed customers. (#3)
+
+### Fixed
+
+- `from=2026-11-03-00-00` was read as midnight UTC rather than in the site's timezone, because the
+  trailing `-00` parsed as an offset. (#3)
+- A wildcard file name (`stock_*.csv`) in a local folder could pick a symlink pointing outside the
+  folder. Wildcards now pick only regular files, and the match is resolved inside the folder again.
+- An XML file in UTF-16, or one whose DOCTYPE came after the first 64 KB, got past the check that
+  refuses DOCTYPEs and entity declarations. The parser now refuses them as it reads.
+- `from`, `to`, `all` and `limit` captured by a site route (`'export-orders/<from>' =>
+  'erpy/export/orders'`) were ignored. Craft doesn't merge route parameters into the query string. (#3)
+
 ## 5.3.0 - 2026-11-03
 ### Added
 

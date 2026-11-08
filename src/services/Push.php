@@ -152,7 +152,10 @@ class Push extends Component
             $addresses[] = new \justinholtweb\erpy\models\canonical\ErpAddress([
                 'type' => \justinholtweb\erpy\models\canonical\ErpAddress::TYPE_SHIPPING,
                 'fullName' => $address->fullName,
+                'firstName' => $address->firstName ?: null,
+                'lastName' => $address->lastName ?: null,
                 'organization' => $address->organization,
+                'taxId' => $address->organizationTaxId ?: null,
                 'addressLine1' => $address->addressLine1,
                 'addressLine2' => $address->addressLine2,
                 'locality' => $address->locality,

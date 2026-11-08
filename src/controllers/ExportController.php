@@ -9,10 +9,11 @@ use craft\db\Query;
 use craft\helpers\Db;
 use craft\web\Controller;
 use DateTime;
-use DateTimeZone;
+use justinholtweb\erpy\base\Connector;
 use justinholtweb\erpy\base\Direction;
 use justinholtweb\erpy\base\Entity;
-use justinholtweb\erpy\connectors\FileConnector;
+use justinholtweb\erpy\base\OrderExport;
+use justinholtweb\erpy\base\ServesOrders;
 use justinholtweb\erpy\db\Table;
 use justinholtweb\erpy\models\Connection;
 use justinholtweb\erpy\models\Run;
@@ -26,8 +27,10 @@ use yii\web\Response;
  * Orders served to an ERP that fetches them: `GET erpy/export/<handle>/orders`.
  *
  * Serving is delivering. Each order goes through `Push::deliver()` exactly as a pushed one does
- * — the identity map, the mutex, the run log, the dead letters — and the file connector, instead
- * of sending it anywhere, hands it back here to be written into the response. So the order is in
+ * — the identity map, the mutex, the run log, the dead letters — and the connector, instead of
+ * sending it anywhere, hands it back here to be written into the response by its
+ * `ServesOrders::renderServed()`. Any connector that implements `ServesOrders` can be fetched
+ * from; the built-in file connector is one. So the order is in
  * the identity map as delivered, and the next poll does not serve it again.
  *
  * - No parameters: orders this connection has not delivered yet, oldest first.
@@ -37,7 +40,7 @@ use yii\web\Response;
  * - `limit`: at most this many (default 200, at most 1000).
  *
  * The token travels as an `X-Erpy-Token` header or a basic-auth password, and only in the URL
- * (`?key=…`) when the merchant has allowed it. Only GET: a HEAD or a link-preview bot must not be able to
+ * (`?key=…`) when the merchant has allowed it. A request from an allowed IP address needs none. Only GET: a HEAD or a link-preview bot must not be able to
  * mark orders as delivered.
  */
 class ExportController extends Controller
@@ -62,20 +65,20 @@ class ExportController extends Controller
 
         // One answer for every way this is not an export, so the endpoint does not tell a
         // stranger which handles exist.
-        if (!$connection || !$connection->enabled || !$connector instanceof FileConnector
-            || !$connector->deliversOnRequest(Entity::ORDER) || !$connection->syncs(Entity::ORDER, Direction::PUSH)) {
+        if (!$connection || !$connection->enabled || !$connector instanceof ServesOrders
+            || !$connector instanceof Connector || !$connector->deliversOnRequest(Entity::ORDER) || !$connection->syncs(Entity::ORDER, Direction::PUSH)) {
             throw new NotFoundHttpException('No such export.');
         }
 
         $this->authorise($connection);
 
-        $from = $this->date('from');
-        $to = $this->date('to', endOfDay: true);
-        $all = (bool)$this->request->getQueryParam('all');
+        $dateFormat = (string)$connection->getSetting('exportDateFormat', '');
+        $from = $this->date('from', $dateFormat);
+        $to = $this->date('to', $dateFormat, endOfDay: true);
+        $all = (bool)$this->param('all');
         $explicit = $all || $from !== null || $to !== null;
-        $limit = max(1, min(self::MAX_LIMIT, (int)($this->request->getQueryParam('limit') ?: self::DEFAULT_LIMIT)));
+        $limit = max(1, min(self::MAX_LIMIT, (int)($this->param('limit') ?: self::DEFAULT_LIMIT)));
 
-        $writer = $connector->orderWriter();
         $push = $plugin->getPush();
         $db = Craft::$app->getDb();
 
@@ -85,11 +88,11 @@ class ExportController extends Controller
         $transaction = $db->beginTransaction();
 
         try {
-            $documents = FileConnector::collect(function() use ($connection, $explicit, $from, $to, $limit, $push) {
+            $documents = Connector::collect(function() use ($connection, $explicit, $from, $to, $limit, $push) {
                 $this->serve($connection, $explicit, $from, $to, $limit, $push);
             });
 
-            $body = $writer->render($documents);
+            $body = $connector->renderServed($documents);
             $transaction->commit();
         } catch (\Throwable $e) {
             $transaction->rollBack();
@@ -108,8 +111,8 @@ class ExportController extends Controller
         $response->format = Response::FORMAT_RAW;
         $response->content = $body;
         $response->getHeaders()
-            ->set('Content-Type', $writer->contentType())
-            ->set('Content-Disposition', 'inline; filename="orders.' . $writer->extension() . '"')
+            ->set('Content-Type', $connector->servedContentType())
+            ->set('Content-Disposition', 'inline; filename="orders.' . preg_replace('/[^A-Za-z0-9]/', '', $connector->servedExtension()) . '"')
             ->set('Cache-Control', 'no-store')
             ->set('X-Erpy-Count', (string)count($documents));
 
@@ -119,13 +122,20 @@ class ExportController extends Controller
     private function authorise(Connection $connection): void
     {
         $expected = (string)$connection->getSetting('exportToken', '');
+        $allowedIps = OrderExport::allowedIps($connection);
 
         // Every refusal is the same 404 as a handle that does not exist, so the endpoint cannot
         // be used to find out which connections serve orders. The reason goes to the log.
-        if ($expected === '') {
-            Craft::warning("Erpy refused an order export for “{$connection->handle}”: no export token is set.", 'erpy');
+        if ($expected === '' && $allowedIps === []) {
+            Craft::warning("Erpy refused an order export for “{$connection->handle}”: no export token or allowed IP address is set.", 'erpy');
 
             throw new NotFoundHttpException('No such export.');
+        }
+
+        // An ERP that polls from one fixed address and cannot be made to send a token. A listed
+        // address with a token is let in here too; the token is not then checked.
+        if ($allowedIps !== [] && OrderExport::ipAllowed($this->clientIp(), $allowedIps)) {
+            return;
         }
 
         $provided = (string)$this->request->getHeaders()->get('X-Erpy-Token', '');
@@ -143,11 +153,32 @@ class ExportController extends Controller
 
         // Hashed first so hash_equals compares equal lengths, and constant-time so the endpoint
         // cannot be used to guess the token a character at a time.
-        if ($provided === '' || !hash_equals(hash('sha256', $expected), hash('sha256', $provided))) {
-            Craft::warning("Erpy refused an order export for “{$connection->handle}”: bad or missing token.", 'erpy');
+        if ($expected === '' || $provided === '' || !hash_equals(hash('sha256', $expected), hash('sha256', $provided))) {
+            Craft::warning("Erpy refused an order export for “{$connection->handle}” from {$this->clientIp()}: bad or missing token, and not an allowed IP address.", 'erpy');
 
             throw new NotFoundHttpException('No such export.');
         }
+    }
+
+    /**
+     * The address the allowed-IP list is checked against.
+     *
+     * Craft's own resolved IP honours `X-Forwarded-For` from whichever hosts `trustedHosts`
+     * names — and Craft's default for `trustedHosts` is every host, so out of the box anybody
+     * can claim to be the ERP's address with one header. Until the site names its proxies, the
+     * TCP peer is the only address worth believing. Behind a proxy that means the proxy's
+     * address, which simply does not match: the safe way to be wrong.
+     */
+    private function clientIp(): ?string
+    {
+        // Entries are either `'host'` or `'host' => [headers]`; check both spellings of "everyone".
+        $trusted = array_map('strval', array_merge(array_keys($this->request->trustedHosts), array_filter($this->request->trustedHosts, 'is_string')));
+
+        if (array_intersect($trusted, ['any', '*', '0.0.0.0/0', '::/0']) !== []) {
+            return $this->request->getRemoteIP();
+        }
+
+        return $this->request->getUserIP();
     }
 
     /**
@@ -256,24 +287,37 @@ class ExportController extends Controller
     /**
      * A date parameter, read in the site's timezone. A bare date as `to` means the end of that day.
      */
-    private function date(string $name, bool $endOfDay = false): ?DateTime
+    private function date(string $name, string $format, bool $endOfDay = false): ?DateTime
     {
-        $value = trim((string)$this->request->getQueryParam($name, ''));
+        $value = trim((string)$this->param($name));
 
         if ($value === '') {
             return null;
         }
 
         try {
-            $date = new DateTime($value, new DateTimeZone(Craft::$app->getTimeZone()));
-        } catch (\Throwable) {
-            throw new BadRequestHttpException("“{$name}” is not a date. Use 2026-11-03 or 2026-11-03T14:00:00.");
+            return OrderExport::parseDate($value, $format, $endOfDay);
+        } catch (\InvalidArgumentException) {
+            $example = $format !== '' ? (new DateTime())->format($format) : '2026-11-03 or 2026-11-03T14:00:00';
+
+            throw new BadRequestHttpException("“{$name}” is not a date. Use {$example}.");
+        }
+    }
+
+    /**
+     * A query parameter, or the same name captured by a site route — so an ERP that already
+     * fetches `/export-orders/orders-time/<from>` can keep its URL. Craft, unlike Yii, does not
+     * merge route parameters into the query string, so without this a `<from>` in a route would be
+     * silently ignored and the ERP handed only new orders instead of its range.
+     */
+    private function param(string $name): mixed
+    {
+        $value = $this->request->getQueryParam($name);
+
+        if ($value !== null && $value !== '') {
+            return $value;
         }
 
-        if ($endOfDay && preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
-            $date->setTime(23, 59, 59);
-        }
-
-        return $date;
+        return Craft::$app->getUrlManager()->getRouteParams()[$name] ?? null;
     }
 }

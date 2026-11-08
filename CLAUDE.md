@@ -79,8 +79,12 @@ yield rows; the first page fills a `Spool` (UTF-8 JSONL in runtime) and the curs
 offset into it, so a big file is parsed once. `RowMapper` guesses canonical fields from column
 names; the overlay is the real mapping. Per-file settings are `entityFields()` → `sync[entity][filters]`.
 Serving orders keeps invariant 2: `ExportController` calls `Push::order()` with
-`Run::TRIGGER_EXPORT` inside `FileConnector::collect()`, and the connector hands the document back
-instead of sending it. `Push::deliver()` refuses any other trigger for a connector whose
+`Run::TRIGGER_EXPORT` inside `Connector::collect()`, and `Connector::pushDocument()` hands the
+document back instead of calling the connector's push method. Any connector implementing
+`base\ServesOrders` can be served (5.4.0, #3); `base\OrderExport` holds the shared settings, the
+IP allowlist and `from`/`to` parsing. The allowlist uses the TCP peer while `trustedHosts` is
+Craft's default `any`. Craft does **not** merge route params into the query string, so the
+controller reads both. `Push::deliver()` refuses any other trigger for a connector whose
 `deliversOnRequest()` is true, and `queueOrder()` skips it. Location fields are endpoints
 (admin-only); per-entity file names are cleaned so they cannot leave the base folder.
 
@@ -198,7 +202,7 @@ No local PHP on this Mac. Everything runs inside the plugin-testing container:
 cd ~/Sites/plugin-testing
 ddev exec php /var/www/craft-erpy/tests/integration/checks.php      # 159 engine checks
 ddev exec php /var/www/craft-erpy/tests/integration/connectors.php  # 324 conformance checks
-docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-erpy/tests/integration/files.php     # 70: file connector — every encoding/format, engine runs, write + serve over HTTP, upload
+docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-erpy/tests/integration/files.php     # 79: file connector — every encoding/format, engine runs, write + serve over HTTP, upload
 # …plus 6 live SFTP checks: docker run -d --rm --name erpy-sftp-test --network ddev-plugin-testing_default atmoz/sftp erpy:pass123:1001:1001:export
 #    then add `-e ERPY_SFTP_HOST=erpy-sftp-test` to the files.php line
 docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-erpy/tests/integration/security.php  # 12: encryption at rest, repoint guard over HTTP, webhook

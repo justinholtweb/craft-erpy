@@ -4,6 +4,8 @@ namespace justinholtweb\erpy\base;
 
 use Craft;
 use justinholtweb\erpy\auth\OAuth2AuthorizationCode;
+use justinholtweb\erpy\models\canonical\ErpDocument;
+use justinholtweb\erpy\models\canonical\ErpOrder;
 use justinholtweb\erpy\models\Connection;
 use justinholtweb\erpy\Plugin;
 use Throwable;
@@ -24,6 +26,9 @@ abstract class Connector implements ConnectorInterface
     private ?Transport $transport = null;
 
     private ?AuthInterface $auth = null;
+
+    /** @var ErpDocument[]|null documents handed over while the export endpoint is collecting */
+    private static ?array $collected = null;
 
     /**
      * Which method handles which entity. A connector implements only the ones its capabilities
@@ -94,6 +99,27 @@ abstract class Connector implements ConnectorInterface
         return false;
     }
 
+    /**
+     * Run `$send`, and return every document a connector was handed while it ran. Only the export
+     * endpoint calls this: it is how a served order passes through `Push::deliver()` — the
+     * identity map, the mutex, the run log — on its way into a response instead of a request.
+     *
+     * @return ErpDocument[]
+     */
+    public static function collect(callable $send): array
+    {
+        $previous = self::$collected;
+        self::$collected = [];
+
+        try {
+            $send();
+
+            return self::$collected;
+        } finally {
+            self::$collected = $previous;
+        }
+    }
+
     public function setConnection(Connection $connection): void
     {
         $this->connection = $connection;
@@ -130,6 +156,24 @@ abstract class Connector implements ConnectorInterface
      */
     public function pushDocument(string $entity, object $document, ?string $remoteId = null): PushResult
     {
+        // A document the ERP fetches is handed back to the export endpoint, not sent. The
+        // connector's own push method never sees it, so serving needs nothing from an add-on
+        // beyond `ServesOrders`.
+        if ($this->deliversOnRequest($entity)) {
+            if (self::$collected === null) {
+                return PushResult::rejected(sprintf(
+                    '%s hands over %s only when the ERP fetches them from the export URL.',
+                    static::displayName(),
+                    $entity,
+                ));
+            }
+
+            self::$collected[] = $document;
+            $key = $document instanceof ErpOrder ? $document->orderNumber : ($document instanceof ErpDocument ? $document->naturalKey() : null);
+
+            return PushResult::ok('export:' . gmdate('Ymd\THis\Z'), $key);
+        }
+
         $method = self::PUSH_METHODS[$entity] ?? null;
 
         if ($method === null || !method_exists($this, $method)) {
