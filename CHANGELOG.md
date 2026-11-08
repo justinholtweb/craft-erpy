@@ -1,6 +1,6 @@
 # Release Notes for Erpy
 
-## 5.4.1 - Unreleased
+## 5.4.1 - 2026-11-08
 ### Security
 
 - The export URL's allowed IP addresses now ignore `X-Forwarded-For` whenever Craft's
