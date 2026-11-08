@@ -1102,6 +1102,23 @@ XML;
             ?: json_encode(['listed' => $listed, 'ipOnly' => $ipOnly, 'forged' => $forged, 'forgedWithToken' => $forgedWithToken]);
     });
 
+    check('the allowlist believes X-Forwarded-For only when trustedHosts names proxies, however "everyone" is spelled', function() {
+        $cases = [
+            [['any'], true],
+            [['*'], true],
+            [['0.0.0.0/0'], true],
+            [['0.0.0.0/1', '128.0.0.0/1'], true],
+            [['any' => ['X-Forwarded-For']], true],
+            [['10.0.0.0/8', '172.16.0.0/12'], false],
+            [['192.0.2.10' => ['X-Forwarded-For']], false],
+            [['proxy.internal'], false],
+            [[], false],
+        ];
+        $wrong = array_filter($cases, static fn(array $case) => justinholtweb\erpy\controllers\ExportController::trustsPublicAddresses($case[0]) !== $case[1]);
+
+        return $wrong === [] ?: json_encode(array_values($wrong));
+    });
+
     check('allowed addresses: ranges match, typos and whole-internet ranges never let anybody in', function() {
         $connection = new Connection(['settings' => ['exportAllowedIps' => "203.0.113.0/24;\n2001:db8::/48, nonsense, 10.0.0.1/40, 0.0.0.0/0, ::/0, 1.2.3.4/abc"]]);
         $allowed = OrderExport::allowedIps($connection);

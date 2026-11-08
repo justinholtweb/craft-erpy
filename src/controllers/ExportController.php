@@ -171,14 +171,43 @@ class ExportController extends Controller
      */
     private function clientIp(): ?string
     {
-        // Entries are either `'host'` or `'host' => [headers]`; check both spellings of "everyone".
-        $trusted = array_map('strval', array_merge(array_keys($this->request->trustedHosts), array_filter($this->request->trustedHosts, 'is_string')));
-
-        if (array_intersect($trusted, ['any', '*', '0.0.0.0/0', '::/0']) !== []) {
+        // Asked by behaviour, not by spelling: `any`, `*`, `0.0.0.0/0` and two `/1` halves all
+        // trust the internet. If a public address would count as a proxy, any client can name
+        // its own address in `X-Forwarded-For`, so only the TCP peer is worth believing.
+        if (self::trustsPublicAddresses($this->request->trustedHosts)) {
             return $this->request->getRemoteIP();
         }
 
+        // `trustedHosts` names real proxies. Yii keeps `X-Forwarded-For` only when the TCP peer is
+        // one of them, and walks the chain from the right to the first hop that is not.
         return $this->request->getUserIP();
+    }
+
+    /**
+     * Whether `trustedHosts` (in Yii's shape: `'range'` or `'range' => [headers]`) would trust
+     * well-known public addresses, the way `Request::getTrustedHeaders()` matches them.
+     */
+    public static function trustsPublicAddresses(array $trustedHosts): bool
+    {
+        $validator = new \yii\validators\IpValidator();
+
+        foreach ($trustedHosts as $key => $value) {
+            $range = is_array($value) ? $key : $value;
+
+            foreach (['8.8.8.8', '1.1.1.1', '203.0.113.7', '2001:4860:4860::8888'] as $probe) {
+                try {
+                    $validator->setRanges($range);
+
+                    if ($validator->validate($probe)) {
+                        return true;
+                    }
+                } catch (\Throwable) {
+                    // A hostname or malformed entry: Yii would not match an IP against it either.
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

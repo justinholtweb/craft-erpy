@@ -1,5 +1,13 @@
 # Release Notes for Erpy
 
+## 5.4.1 - Unreleased
+### Security
+
+- The export URL's allowed IP addresses now ignore `X-Forwarded-For` whenever Craft's
+  `trustedHosts` would trust a public address, not only when it is spelled `any`. A list such as
+  `['0.0.0.0/1', '128.0.0.0/1']` trusts the whole internet too, and would have let a client name
+  its own address with one header.
+
 ## 5.4.0 - 2026-11-08
 ### Added
 

@@ -202,7 +202,7 @@ No local PHP on this Mac. Everything runs inside the plugin-testing container:
 cd ~/Sites/plugin-testing
 ddev exec php /var/www/craft-erpy/tests/integration/checks.php      # 159 engine checks
 ddev exec php /var/www/craft-erpy/tests/integration/connectors.php  # 324 conformance checks
-docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-erpy/tests/integration/files.php     # 79: file connector — every encoding/format, engine runs, write + serve over HTTP, upload
+docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-erpy/tests/integration/files.php     # 80: file connector — every encoding/format, engine runs, write + serve over HTTP, upload
 # …plus 6 live SFTP checks: docker run -d --rm --name erpy-sftp-test --network ddev-plugin-testing_default atmoz/sftp erpy:pass123:1001:1001:export
 #    then add `-e ERPY_SFTP_HOST=erpy-sftp-test` to the files.php line
 docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-erpy/tests/integration/security.php  # 12: encryption at rest, repoint guard over HTTP, webhook
