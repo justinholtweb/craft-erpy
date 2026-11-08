@@ -82,8 +82,8 @@ Serving orders keeps invariant 2: `ExportController` calls `Push::order()` with
 `Run::TRIGGER_EXPORT` inside `Connector::collect()`, and `Connector::pushDocument()` hands the
 document back instead of calling the connector's push method. Any connector implementing
 `base\ServesOrders` can be served (5.4.0, #3); `base\OrderExport` holds the shared settings, the
-IP allowlist and `from`/`to` parsing. The allowlist uses the TCP peer while `trustedHosts` is
-Craft's default `any`. Craft does **not** merge route params into the query string, so the
+IP allowlist and `from`/`to` parsing. The allowlist uses `ExportController::resolveClientIp()`: the TCP peer, or the
+`X-Forwarded-For` chain read from the right when the peer is a named proxy. Craft does **not** merge route params into the query string, so the
 controller reads both. `Push::deliver()` refuses any other trigger for a connector whose
 `deliversOnRequest()` is true, and `queueOrder()` skips it. Location fields are endpoints
 (admin-only); per-entity file names are cleaned so they cannot leave the base folder.
@@ -181,6 +181,10 @@ The stall alert is what would tell a merchant that.
   shipped. Always brace: `{$handle}`. phpstan catches it.
 - **Craft reserves the `token` query parameter** for its own tokenised routes and answers 400 for
   any value it does not recognise, before a controller runs. A URL token is `?key=`.
+- **Craft's `Request::getUserIP()` is not Yii's.** It returns the *left-most* valid
+  `X-Forwarded-For` entry, which the client wrote. Never use it for an authorisation decision.
+  Read the chain from the right past `trustedHosts` (`ExportController::resolveClientIp()`), and
+  remember Craft's default `trustedHosts` is `any`. 5.4.0 and 5.4.1 shipped this bug.
 - **SFTP `rename` will not replace an existing file.** Use `posix_rename` (OpenSSH), and delete
   first only as a fallback, or every second write of the same file fails with a bare "Failure".
 - **`XMLReader::expand()` on a truncated record raises a warning**, which Craft turns into an
@@ -202,7 +206,7 @@ No local PHP on this Mac. Everything runs inside the plugin-testing container:
 cd ~/Sites/plugin-testing
 ddev exec php /var/www/craft-erpy/tests/integration/checks.php      # 159 engine checks
 ddev exec php /var/www/craft-erpy/tests/integration/connectors.php  # 324 conformance checks
-docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-erpy/tests/integration/files.php     # 80: file connector — every encoding/format, engine runs, write + serve over HTTP, upload
+docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-erpy/tests/integration/files.php     # 81: file connector — every encoding/format, engine runs, write + serve over HTTP, upload
 # …plus 6 live SFTP checks: docker run -d --rm --name erpy-sftp-test --network ddev-plugin-testing_default atmoz/sftp erpy:pass123:1001:1001:export
 #    then add `-e ERPY_SFTP_HOST=erpy-sftp-test` to the files.php line
 docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-erpy/tests/integration/security.php  # 12: encryption at rest, repoint guard over HTTP, webhook

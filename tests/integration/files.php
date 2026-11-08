@@ -1119,6 +1119,29 @@ XML;
         return $wrong === [] ?: json_encode(array_values($wrong));
     });
 
+    check('behind a named proxy, a client cannot forge its address by writing X-Forwarded-For itself', function() {
+        $resolve = [justinholtweb\erpy\controllers\ExportController::class, 'resolveClientIp'];
+        $proxy = ['10.0.0.1'];
+        $chain = ['10.0.0.0/8'];
+        $got = [
+            // The client wrote the ERP's address; the proxy appended the real one.
+            $resolve('10.0.0.1', $proxy, '203.0.113.7, 198.51.100.9'),
+            // Not from the proxy: the header is ignored.
+            $resolve('198.51.100.9', $proxy, '203.0.113.7'),
+            // Two trusted proxies in a row.
+            $resolve('10.0.0.1', $chain, '203.0.113.7, 198.51.100.9, 10.0.0.5'),
+            // The genuine ERP through the proxy.
+            $resolve('10.0.0.1', $proxy, '203.0.113.7'),
+            // Trust-everyone: the TCP peer only.
+            $resolve('198.51.100.9', ['any'], '203.0.113.7'),
+            // Junk stops the walk at the last good hop.
+            $resolve('10.0.0.1', $proxy, 'junk, 198.51.100.9'),
+            $resolve('10.0.0.1', $proxy, null),
+        ];
+
+        return $got === ['198.51.100.9', '198.51.100.9', '198.51.100.9', '203.0.113.7', '198.51.100.9', '198.51.100.9', '10.0.0.1'] ?: json_encode($got);
+    });
+
     check('allowed addresses: ranges match, typos and whole-internet ranges never let anybody in', function() {
         $connection = new Connection(['settings' => ['exportAllowedIps' => "203.0.113.0/24;\n2001:db8::/48, nonsense, 10.0.0.1/40, 0.0.0.0/0, ::/0, 1.2.3.4/abc"]]);
         $allowed = OrderExport::allowedIps($connection);

@@ -1,5 +1,15 @@
 # Release Notes for Erpy
 
+## 5.4.2 - 2026-11-08
+### Security
+
+- On a site whose `trustedHosts` names its proxy, a client could get past the export URL's
+  allowed IP addresses by putting an allowed address in its own `X-Forwarded-For` header. Erpy
+  took the client's address from Craft's `Request::getUserIP()`, which returns the left-most entry
+  of that header, and that entry is whatever the client wrote. Erpy now reads the chain from the
+  right and stops at the first address that isn't a trusted proxy. Sites with Craft's default
+  `trustedHosts`, or without an allowed-IP list, were not affected.
+
 ## 5.4.1 - 2026-11-08
 ### Security
 

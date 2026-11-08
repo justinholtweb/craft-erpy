@@ -163,24 +163,75 @@ class ExportController extends Controller
     /**
      * The address the allowed-IP list is checked against.
      *
-     * Craft's own resolved IP honours `X-Forwarded-For` from whichever hosts `trustedHosts`
-     * names — and Craft's default for `trustedHosts` is every host, so out of the box anybody
-     * can claim to be the ERP's address with one header. Until the site names its proxies, the
-     * TCP peer is the only address worth believing. Behind a proxy that means the proxy's
-     * address, which simply does not match: the safe way to be wrong.
+     * Not `Request::getUserIP()`. Craft's override of it returns the left-most valid entry of
+     * `X-Forwarded-For`, which is whatever the client wrote. A proxy appends the real address
+     * after it, so the client can name any address it likes. The chain is walked here instead.
      */
     private function clientIp(): ?string
     {
-        // Asked by behaviour, not by spelling: `any`, `*`, `0.0.0.0/0` and two `/1` halves all
-        // trust the internet. If a public address would count as a proxy, any client can name
-        // its own address in `X-Forwarded-For`, so only the TCP peer is worth believing.
-        if (self::trustsPublicAddresses($this->request->trustedHosts)) {
-            return $this->request->getRemoteIP();
+        $forwarded = null;
+
+        foreach ($this->request->ipHeaders as $header) {
+            if ($this->request->getHeaders()->has($header)) {
+                $forwarded = (string)$this->request->getHeaders()->get($header);
+                break;
+            }
         }
 
-        // `trustedHosts` names real proxies. Yii keeps `X-Forwarded-For` only when the TCP peer is
-        // one of them, and walks the chain from the right to the first hop that is not.
-        return $this->request->getUserIP();
+        return self::resolveClientIp($this->request->getRemoteIP(), $this->request->trustedHosts, $forwarded);
+    }
+
+    /**
+     * The client's address, believing `X-Forwarded-For` only as far as the proxies in
+     * `trustedHosts` vouch for it.
+     *
+     * - The TCP peer, unless it is a trusted proxy. A header from anyone else is ignored.
+     * - The TCP peer as well when `trustedHosts` would trust a public address (Craft's default,
+     *   `any`, does). Then every client counts as a proxy and could name its own address.
+     * - Otherwise the chain is read from the right, skipping trusted proxies. The first address
+     *   that is not one is the client. Everything to its left was written by the client.
+     */
+    public static function resolveClientIp(?string $remote, array $trustedHosts, ?string $forwarded): ?string
+    {
+        if ($remote === null || $forwarded === null || trim($forwarded) === ''
+            || self::trustsPublicAddresses($trustedHosts) || !self::isTrusted($remote, $trustedHosts)) {
+            return $remote;
+        }
+
+        $client = $remote;
+
+        foreach (array_reverse(array_map('trim', explode(',', $forwarded))) as $hop) {
+            if (filter_var($hop, FILTER_VALIDATE_IP) === false) {
+                break;
+            }
+
+            $client = $hop;
+
+            if (!self::isTrusted($hop, $trustedHosts)) {
+                break;
+            }
+        }
+
+        return $client;
+    }
+
+    private static function isTrusted(string $ip, array $trustedHosts): bool
+    {
+        $validator = new \yii\validators\IpValidator();
+
+        foreach ($trustedHosts as $key => $value) {
+            try {
+                $validator->setRanges(is_array($value) ? $key : $value);
+
+                if ($validator->validate($ip)) {
+                    return true;
+                }
+            } catch (\Throwable) {
+                // A hostname or malformed entry: never matches an address.
+            }
+        }
+
+        return false;
     }
 
     /**
